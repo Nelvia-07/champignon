@@ -47,8 +47,23 @@
           "forceCxx20": true,
           "enableOpenCL": true
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "useAndroidX": true,
+            "enableJetifier": true
+          }
+        }
       ]
     ],
-    "scheme": "mood-tree-hole"
+    "scheme": "mood-tree-hole",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f686644e-6447-44b3-846b-f8796b0be1ff"
+      }
+    }
   }
 }

@@ -1,0 +1,9 @@
+node_modules
+.expo
+.gemini
+swift-backup
+dist
+build
+web-build
+.env.local
+.env.*.local
