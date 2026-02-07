@@ -56,7 +56,8 @@
             "enableJetifier": true
           }
         }
-      ]
+      ],
+      "./plugins/withAndroidJetifier.js"
     ],
     "scheme": "mood-tree-hole",
     "extra": {
