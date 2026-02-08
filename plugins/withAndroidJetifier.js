@@ -13,10 +13,15 @@ const withAndroidJetifier = (config) => {
       key: 'android.useAndroidX',
       value: 'true',
     });
+    config.modResults.push({
+      type: 'property',
+      key: 'org.gradle.jvmargs',
+      value: '-Xmx4096m -XX:MaxMetaspaceSize=1024m',
+    });
     return config;
   });
 
-  // 2. Aggressively exclude support-compat to fix Duplicate classes error
+  // 2. Aggressively exclude support-compat and force AndroidX versions
   config = withProjectBuildGradle(config, (config) => {
     if (config.modResults.contents.includes('exclude group: "com.android.support"')) {
       return config;
@@ -30,6 +35,9 @@ allprojects {
             force 'androidx.appcompat:appcompat:1.6.1'
             force 'androidx.fragment:fragment:1.7.1'
             force 'androidx.annotation:annotation:1.8.0'
+            force 'androidx.lifecycle:lifecycle-common:2.8.3'
+            force 'androidx.lifecycle:lifecycle-runtime:2.8.3'
+            force 'androidx.work:work-runtime:2.9.0'
         }
         exclude group: "com.android.support"
     }
