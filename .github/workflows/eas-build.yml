@@ -70,6 +70,9 @@ jobs:
       - name: 📦 Install dependencies
         run: npm install
 
+      - name: 🔧 Fix permissions
+        run: chmod -R +x node_modules/.bin
+
       - name: 🏗 Expo Prebuild
         run: npx expo prebuild --platform ios
 
