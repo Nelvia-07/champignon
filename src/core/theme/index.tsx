@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, ReactNode, useEffect } from
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ViewStyle, TextStyle, ImageStyle } from 'react-native';
 
-export type ThemeType = 'handdrawn' | 'minimalist';
+export type ThemeType = 'handdrawn' | 'minimalist' | 'mushroom';
 
 interface ThemeColors {
     background: string;
@@ -25,6 +25,7 @@ export interface AppTheme {
     typography: ThemeTypography;
     isHandDrawn: boolean;
     paperTexture?: any;
+    themeType: ThemeType;
 }
 
 const HandDrawnTheme: AppTheme = {
@@ -42,10 +43,8 @@ const HandDrawnTheme: AppTheme = {
         caption: { fontSize: 12, color: '#999999', fontWeight: '400', opacity: 0.8 },
         number: { fontSize: 13, color: '#666666', fontWeight: '400', opacity: 0.5 },
     },
-
-
     isHandDrawn: true,
-    paperTexture: require('../../../assets/themes/handdrawn/paper_bg.png'),
+    themeType: 'handdrawn',
 };
 
 const MinimalistTheme: AppTheme = {
@@ -64,11 +63,32 @@ const MinimalistTheme: AppTheme = {
         number: { fontSize: 13, fontWeight: '500' },
     },
     isHandDrawn: false,
+    themeType: 'minimalist',
+};
+
+const MushroomTheme: AppTheme = {
+    colors: {
+        background: '#FFF9F0', // Warm cream
+        cardBackground: '#FFFFFF',
+        text: '#5D4037', // Deep warm brown
+        secondaryText: '#A1887F', // Muted brown
+        accent: '#E57373', // Mushroom red
+        divider: '#EFEBE9',
+    },
+    typography: {
+        title: { fontSize: 18, color: '#4E342E', fontWeight: 'bold' },
+        body: { fontSize: 14, lineHeight: 22, color: '#5D4037' },
+        caption: { fontSize: 12, color: '#A1887F' },
+        number: { fontSize: 13, color: '#795548' },
+    },
+    isHandDrawn: true,
+    themeType: 'mushroom',
 };
 
 interface ThemeContextType {
     theme: AppTheme;
     themeType: ThemeType;
+    setTheme: (type: ThemeType) => void;
     toggleTheme: () => void;
 }
 
@@ -78,23 +98,38 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     const [themeType, setThemeType] = useState<ThemeType>('handdrawn');
 
     useEffect(() => {
-        AsyncStorage.getItem('themeType').then((stored: string | null) => {
-            if (stored === 'handdrawn' || stored === 'minimalist') {
-                setThemeType(stored);
+        AsyncStorage.getItem('themeType').then((storedValue: string | null) => {
+            if (storedValue === 'handdrawn' || storedValue === 'minimalist' || storedValue === 'mushroom') {
+                setThemeType(storedValue as ThemeType);
             }
         });
     }, []);
 
-    const toggleTheme = () => {
-        const newType = themeType === 'handdrawn' ? 'minimalist' : 'handdrawn';
-        setThemeType(newType);
-        AsyncStorage.setItem('themeType', newType);
+    const setTheme = (type: ThemeType) => {
+        setThemeType(type);
+        AsyncStorage.setItem('themeType', type);
     };
 
-    const theme = themeType === 'handdrawn' ? HandDrawnTheme : MinimalistTheme;
+    const toggleTheme = () => {
+        const types: ThemeType[] = ['handdrawn', 'minimalist', 'mushroom'];
+        const currentIndex = types.indexOf(themeType);
+        const nextIndex = (currentIndex + 1) % types.length;
+        setTheme(types[nextIndex]);
+    };
+
+    const getTheme = (type: ThemeType): AppTheme => {
+        switch (type) {
+            case 'handdrawn': return HandDrawnTheme;
+            case 'minimalist': return MinimalistTheme;
+            case 'mushroom': return MushroomTheme;
+            default: return MushroomTheme;
+        }
+    };
+
+    const theme = getTheme(themeType);
 
     return (
-        <ThemeContext.Provider value={{ theme, themeType, toggleTheme }}>
+        <ThemeContext.Provider value={{ theme, themeType, setTheme, toggleTheme }}>
             {children}
         </ThemeContext.Provider>
     );

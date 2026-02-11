@@ -27,7 +27,6 @@ export default function Index() {
     };
 
     useEffect(() => {
-        initDatabase();
         fetchNotes();
     }, []);
 
@@ -98,9 +97,9 @@ export default function Index() {
                         styles.title,
                         { color: theme.colors.text },
                         theme.isHandDrawn && theme.typography.title,
-                        { fontWeight: '400' }
+                        { fontFamily: 'DancingScript_700Bold', fontSize: 26, fontWeight: '400', letterSpacing: 0.5 }
                     ]}>
-                        小树洞
+                        Champignon
                     </Text>
                     <ChevronDown size={16} color={theme.colors.secondaryText} style={{ marginLeft: 4 }} />
                 </TouchableOpacity>
@@ -238,7 +237,7 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0,0,0,0.3)',
         justifyContent: 'flex-start',
         alignItems: 'center',
-        paddingTop: 100,
+        paddingTop: 120,
     },
     dropdownMenu: {
         borderRadius: 12,

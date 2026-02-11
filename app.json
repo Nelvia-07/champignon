@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "心情树洞",
+    "name": "Champignon",
     "slug": "tree-hole-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -17,7 +17,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mood.treehole",
-      "newArchEnabled": true
+      "newArchEnabled": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSMicrophoneUsageDescription": "需要使用麦克风进行语音输入"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -46,8 +50,7 @@
         {
           "enableEntitlements": true,
           "entitlementsProfile": "production",
-          "forceCxx20": true,
-          "enableOpenCLAndHexagon": true
+          "forceCxx20": true
         }
       ],
       [
@@ -55,11 +58,12 @@
         {
           "android": {
             "useAndroidX": true,
-            "enableJetifier": true
+            "proguardRules": "-keep class com.rnllama.** { *; }"
           }
         }
       ],
-      "./plugins/withAndroidJetifier.js"
+      "./plugins/withAndroidExclusions.js",
+      "@react-native-community/datetimepicker"
     ],
     "scheme": "mood-tree-hole",
     "extra": {

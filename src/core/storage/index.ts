@@ -5,35 +5,49 @@ import { MoodNote, Tag, MoodType } from '../models';
 const db = SQLite.openDatabaseSync('mood_tree_hole.db');
 
 export const initDatabase = () => {
+    // 1. Core tables
     db.execSync(`
-    CREATE TABLE IF NOT EXISTS notes (
-      id TEXT PRIMARY KEY NOT NULL,
-      content TEXT NOT NULL,
-      timestamp TEXT NOT NULL,
-      moodType TEXT,
-      isFollowUp INTEGER DEFAULT 0,
-      parentId TEXT,
-      images TEXT
-    );
-    CREATE TABLE IF NOT EXISTS tags (
-      id TEXT PRIMARY KEY NOT NULL,
-      name TEXT UNIQUE NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS note_tags (
-      note_id TEXT NOT NULL,
-      tag_name TEXT NOT NULL,
-      PRIMARY KEY (note_id, tag_name),
-      FOREIGN KEY (note_id) REFERENCES notes (id) ON DELETE CASCADE
-    );
-    CREATE TABLE IF NOT EXISTS preset_tags (
-      id TEXT PRIMARY KEY NOT NULL,
-      name TEXT UNIQUE NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY NOT NULL,
-      value TEXT
-    );
-  `);
+      CREATE TABLE IF NOT EXISTS notes (
+        id TEXT PRIMARY KEY NOT NULL,
+        content TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        moodType TEXT,
+        isFollowUp INTEGER DEFAULT 0,
+        parentId TEXT,
+        images TEXT
+      );
+    `);
+
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS tags (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT UNIQUE NOT NULL
+      );
+    `);
+
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS note_tags (
+        note_id TEXT NOT NULL,
+        tag_name TEXT NOT NULL,
+        PRIMARY KEY (note_id, tag_name),
+        FOREIGN KEY (note_id) REFERENCES notes (id) ON DELETE CASCADE
+      );
+    `);
+
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS preset_tags (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT UNIQUE NOT NULL,
+        color TEXT
+      );
+    `);
+
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY NOT NULL,
+        value TEXT
+      );
+    `);
 
     // Populate default settings
     db.runSync('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', ['inputAreaDefaultState', 'collapsed']);
@@ -78,8 +92,8 @@ export const initDatabase = () => {
     }
 };
 
-// Note: Call initDatabase() from a useEffect in your root component
-
+// Initialize database immediately on module load
+initDatabase();
 
 export const saveNote = (note: MoodNote) => {
     db.runSync(
@@ -128,6 +142,10 @@ export const updateNoteTags = (noteIds: string[], newTags: string[]) => {
 
 export const updateNoteContent = (id: string, newContent: string) => {
     db.runSync('UPDATE notes SET content = ? WHERE id = ?', [newContent, id]);
+};
+
+export const updateNoteTimestamp = (id: string, newTimestamp: string) => {
+    db.runSync('UPDATE notes SET timestamp = ? WHERE id = ?', [newTimestamp, id]);
 };
 
 export const updateNoteMood = (id: string, mood: MoodType) => {
@@ -201,4 +219,34 @@ export const addPresetTag = (name: string, color?: string) => {
 
 export const deletePresetTag = (name: string) => {
     db.runSync('DELETE FROM preset_tags WHERE name = ?', [name]);
+};
+/**
+ * AI Prompts
+ */
+export const getPrompt = (type: 'analysis' | 'summary'): string | null => {
+    const key = `prompt_${type}`;
+    const row = db.getFirstSync('SELECT value FROM settings WHERE key = ?', [key]) as any;
+    return row ? row.value : null;
+};
+
+export const savePrompt = (type: 'analysis' | 'summary', value: string) => {
+    const key = `prompt_${type}`;
+    db.runSync('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [key, value]);
+};
+
+/**
+ * Summary Presets
+ */
+export const getSummaryPresets = (): { title: string, prompt: string }[] => {
+    const row = db.getFirstSync("SELECT value FROM settings WHERE key = 'summary_presets'") as any;
+    if (!row) return [];
+    try {
+        return JSON.parse(row.value);
+    } catch (e) {
+        return [];
+    }
+};
+
+export const saveSummaryPresets = (presets: { title: string, prompt: string }[]) => {
+    db.runSync("INSERT OR REPLACE INTO settings (key, value) VALUES ('summary_presets', ?)", [JSON.stringify(presets)]);
 };

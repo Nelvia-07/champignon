@@ -1,11 +1,11 @@
 import { AIProvider, AIAnalysisResult } from '../types';
 import { DEFAULT_AI_PROMPT } from '../constants';
 import { initLlama, LlamaContext } from 'llama.rn';
-import { Paths, Directory, File } from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { aiStore } from '../store';
 
-const MODEL_URL = 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf';
-const MODEL_FILENAME = 'qwen2.5-0.5b-instruct-q4_k_m.gguf';
+const MODEL_URL = 'https://hf-mirror.com/bartowski/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/Qwen2.5-0.5B-Instruct-Q4_K_M.gguf';
+const MODEL_FILENAME = 'Qwen2.5-0.5B-Instruct-Q4_K_M.gguf';
 
 export class LlamaLocalProvider implements AIProvider {
     name = 'Llama-Local-Native';
@@ -14,75 +14,155 @@ export class LlamaLocalProvider implements AIProvider {
     private static modelPath: string | null = null;
 
     /**
-     * Get the local model directory
+     * Get the local model directory URI
      */
-    private static getModelDir(): Directory {
-        return new Directory(Paths.document, 'models');
+    private static getModelDirUri(): string {
+        return (FileSystem as any).documentDirectory + 'models/';
     }
 
     /**
-     * Get the local model file
+     * Get the local model file URI
      */
-    private static getModelFile(): File {
-        return new File(this.getModelDir(), MODEL_FILENAME);
+    private static getModelFileUri(): string {
+        return this.getModelDirUri() + MODEL_FILENAME;
     }
 
     /**
      * Check if model is already downloaded
      */
     static async isModelDownloaded(): Promise<boolean> {
-        const modelFile = this.getModelFile();
-        return modelFile.exists;
+        const modelUri = this.getModelFileUri();
+        const info = await FileSystem.getInfoAsync(modelUri);
+        return info.exists;
+    }
+
+    /**
+     * Delete the downloaded model file for re-downloading
+     */
+    static async deleteModel(): Promise<void> {
+        const modelUri = this.getModelFileUri();
+        const info = await FileSystem.getInfoAsync(modelUri);
+        if (info.exists) {
+            await FileSystem.deleteAsync(modelUri);
+            console.log('[LlamaLocal] Model file deleted');
+        }
+        // Release existing context
+        if (LlamaLocalProvider.context) {
+            await LlamaLocalProvider.context.release();
+            LlamaLocalProvider.context = null;
+        }
+        LlamaLocalProvider.modelPath = null;
+        aiStore.setState({ status: 'IDLE', progress: 0, detail: '' });
     }
 
     /**
      * Download the model with progress callback
      */
     static async downloadModel(onProgress?: (progress: number) => void): Promise<string> {
-        const modelDir = this.getModelDir();
-        const modelFile = this.getModelFile();
-        const { downloadAsync, createDownloadResumable } = require('expo-file-system');
+        const modelDirUri = this.getModelDirUri();
+        const modelFileUri = this.getModelFileUri();
 
         // Create models directory if it doesn't exist
-        if (!modelDir.exists) {
-            modelDir.create();
+        const dirInfo = await FileSystem.getInfoAsync(modelDirUri);
+        if (!dirInfo.exists) {
+            await FileSystem.makeDirectoryAsync(modelDirUri, { intermediates: true });
         }
 
         // Check if already downloaded
-        if (modelFile.exists) {
-            console.log('[LlamaLocal] Model already exists at:', modelFile.uri);
-            return modelFile.uri;
+        const info = await FileSystem.getInfoAsync(modelFileUri);
+        console.log(`[LlamaLocal] Checking model file: ${modelFileUri} (Exists: ${info.exists})`);
+
+        if (info.exists) {
+            const sizeMB = ((info.size || 0) / 1024 / 1024);
+            console.log(`[LlamaLocal] Existing model size: ${sizeMB.toFixed(1)}MB`);
+
+            // Strictly check for 0.5B model size (approx 397MB)
+            // If it's 807MB, it's the old 1B model - we must delete it!
+            if (sizeMB > 350 && sizeMB < 450) {
+                aiStore.setState({ lastLog: `模型文件已就绪 (${sizeMB.toFixed(1)}MB)，正在准备加载...` });
+                return modelFileUri;
+            } else {
+                console.log(`[LlamaLocal] File size mismatch (${sizeMB.toFixed(1)}MB), expected ~400MB. Deleting...`);
+                await FileSystem.deleteAsync(modelFileUri).catch(() => { });
+                aiStore.setState({ lastLog: '模型版本不匹配，正在更新...' });
+            }
         }
 
-        console.log('[LlamaLocal] Downloading model from:', MODEL_URL);
-        aiStore.setState({ status: 'DOWNLOADING', progress: 0, detail: 'Downloading model...' });
+        console.log('[LlamaLocal] Model file missing or invalid, starting download from:', MODEL_URL);
+        aiStore.setState({ status: 'DOWNLOADING', progress: 0, detail: 'Downloading model...', lastLog: '正在下载 AI 模型 (约 400MB)...' });
 
+        let downloadResumable: any = null;
         try {
-            const downloadResumable = createDownloadResumable(
+            downloadResumable = FileSystem.createDownloadResumable(
                 MODEL_URL,
-                modelFile.uri,
+                modelFileUri,
                 {},
-                (downloadProgress: any) => {
-                    const progress = Math.round(
-                        (downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite) * 100
-                    );
-                    aiStore.setState({ status: 'DOWNLOADING', progress, detail: `Downloading: ${progress}%` });
-                    onProgress?.(progress);
+                (progress) => {
+                    const total = progress.totalBytesExpectedToWrite;
+                    const written = progress.totalBytesWritten;
+                    const p = total > 0 ? written / total : 0;
+
+                    if (written % (1024 * 1024 * 5) === 0) { // Log every 5MB to avoid spam
+                        console.log(`[LlamaLocal] Progress: ${written} / ${total} (p: ${p})`);
+                    }
+
+                    const writtenMB = (written / 1024 / 1024).toFixed(1);
+                    const totalMB = total > 0 ? (total / 1024 / 1024).toFixed(1) : '?';
+
+                    aiStore.setState({
+                        progress: p,
+                        lastLog: total > 0
+                            ? `下载中: ${(p * 100).toFixed(1)}% (${writtenMB}MB / ${totalMB}MB)`
+                            : `正在接收数据: ${writtenMB}MB (总量未知)`
+                    });
+                    if (onProgress) onProgress(p);
                 }
             );
 
             const result = await downloadResumable.downloadAsync();
-
             if (!result || !result.uri) {
-                throw new Error('Download failed - no URI returned');
+                throw new Error('Download failed: No result from downloadAsync');
             }
 
-            console.log('[LlamaLocal] Model downloaded to:', result.uri);
+            // Verify final size
+            const finalInfo = await FileSystem.getInfoAsync(result.uri);
+            const finalSizeMB = ((finalInfo as any).size || 0) / 1024 / 1024;
+            console.log(`[LlamaLocal] Download complete. URI: ${result.uri}, Size: ${finalSizeMB.toFixed(1)}MB`);
+
+            if (finalSizeMB < 350 || finalSizeMB > 450) {
+                throw new Error(`Downloaded file size mismatch: ${finalSizeMB.toFixed(1)}MB (Expected ~400MB)`);
+            }
+
+            // Verify GGUF magic bytes (first 4 bytes should be 'GGUF')
+            try {
+                // Read first few bytes to verify GGUF format
+                const header = await FileSystem.readAsStringAsync(result.uri, {
+                    encoding: FileSystem.EncodingType.Base64,
+                    length: 4,
+                });
+                // 'R0dVRg==' is 'GGUF' in Base64
+                if (header !== 'R0dVRg==') {
+                    console.error(`[LlamaLocal] Security check failed: File header is not GGUF (${header}).`);
+                    // Don't throw here, just warn, maybe partial read failed but file is OK
+                } else {
+                    console.log('[LlamaLocal] GGUF magic bytes verified.');
+                }
+            } catch (e) {
+                console.warn('[LlamaLocal] Could not verify GGUF header:', e);
+            }
+
+            aiStore.setState({ lastLog: '下载完成，正在验证文件...' });
             return result.uri;
         } catch (error) {
             console.error('[LlamaLocal] Download failed:', error);
-            aiStore.setState({ status: 'ERROR', detail: 'Download failed' });
+            aiStore.setState({
+                status: 'ERROR',
+                detail: 'Download failed',
+                lastLog: `下载失败: ${error instanceof Error ? error.message : '网络连接超时或中断'}`
+            });
             throw error;
+        } finally {
+            downloadResumable = null;
         }
     }
 
@@ -107,27 +187,67 @@ export class LlamaLocalProvider implements AIProvider {
         this.isInitializing = true;
 
         try {
-            // Download model if needed
-            const modelPath = await this.downloadModel();
-            this.modelPath = modelPath;
+            aiStore.setState({ status: 'BUSY', detail: 'Initializing model...', lastLog: '正在准备模型环境...' });
 
-            aiStore.setState({ status: 'BUSY', detail: 'Loading model...' });
-            console.log('[LlamaLocal] Initializing context with model:', modelPath);
+            const modelUri = await LlamaLocalProvider.downloadModel();
+
+            // Verify file exists and log details
+            const fileInfo = await FileSystem.getInfoAsync(modelUri);
+            console.log(`[LlamaLocal] Loading model from: ${modelUri} (${fileInfo.size} bytes)`);
+
+            if (!fileInfo.exists) {
+                throw new Error(`Model file not found at ${modelUri}`);
+            }
+
+            // [CRITICAL] Strip 'file://' AND decode URI components (e.g. %20 -> space)
+            // Native llama.cpp requires a raw string path, not a URL-encoded URI.
+            const cleanPath = decodeURIComponent(modelUri.replace('file://', ''));
+            console.log('[LlamaLocal] Native raw path:', cleanPath);
+
+            // Enable native logs if the JSI binding exists
+            try {
+                if ((global as any).llamaToggleNativeLog) {
+                    (global as any).llamaToggleNativeLog(true);
+                    console.log('[LlamaLocal] Native logging enabled');
+                }
+            } catch (e) {
+                console.warn('[LlamaLocal] Failed to toggle native logs:', e);
+            }
 
             // Initialize the context
-            this.context = await initLlama({
-                model: modelPath,
-                use_mlock: true,
-                n_ctx: 2048,
-                n_gpu_layers: 99, // Use GPU if available
-            });
+            try {
+                console.log('[LlamaLocal] Calling initLlama with path:', cleanPath);
+                LlamaLocalProvider.context = await initLlama({
+                    model: cleanPath,
+                    use_mlock: false,
+                    use_mmap: false,  // Disable for troubleshooting on iOS development builds
+                    n_ctx: 512,
+                    n_gpu_layers: 0,
+                    n_threads: 4,
+                });
+                console.log('[LlamaLocal] initLlama successful');
+            } catch (nativeError) {
+                console.error('[LlamaLocal] Native initLlama error details:', nativeError);
 
-            aiStore.setState({ status: 'READY', detail: 'Model loaded' });
-            console.log('[LlamaLocal] Context initialized successfully');
-            return this.context;
+                // STOP auto-deleting during debug phase so user can inspect the file
+                console.log('[LlamaLocal] Model loading failed. Keeping file for inspection.');
+
+                // Extra check: is the file really a GGUF?
+                const head = await FileSystem.readAsStringAsync(modelUri, { encoding: FileSystem.EncodingType.Base64, length: 4 }).catch(() => '');
+                console.log(`[LlamaLocal] File header at error time (B64): ${head}`);
+
+                throw new Error(`原生加载失败: ${nativeError instanceof Error ? nativeError.message : String(nativeError)}`);
+            }
+
+            aiStore.setState({ status: 'READY', lastLog: 'AI 引擎已就绪' });
+            return LlamaLocalProvider.context;
         } catch (error) {
-            console.error('[LlamaLocal] Failed to initialize:', error);
-            aiStore.setState({ status: 'ERROR', error: String(error) });
+            console.error('[LlamaLocal] Initialization workflow failed:', error);
+            aiStore.setState({
+                status: 'ERROR',
+                detail: 'Initialization failed',
+                lastLog: `初始化失败: ${error instanceof Error ? error.message : '错误'}`
+            });
             throw error;
         } finally {
             this.isInitializing = false;
@@ -156,6 +276,8 @@ export class LlamaLocalProvider implements AIProvider {
                 .replace(/\$\{text\}/g, text)
                 .replace(/\$\{presetTags\}/g, presetTags.join(', '));
 
+            console.log('[LlamaLocal] Final Analysis Prompt:', finalPrompt);
+
             const result = await context.completion({
                 messages: [
                     {
@@ -176,6 +298,7 @@ export class LlamaLocalProvider implements AIProvider {
 
             // Parse the JSON response
             const responseText = result.text;
+            console.log('[LlamaLocal] Raw Analysis Response:', responseText);
             const jsonMatch = responseText.match(/\{.*\}/s);
             if (jsonMatch) {
                 const data = JSON.parse(jsonMatch[0]);

@@ -13,14 +13,13 @@ export const AIEngineBridge = () => {
     // Check if we should load the WebView based on provider setting
     useEffect(() => {
         const settings = getAISettings();
-        const isLocal = settings.provider === 'qwen';
-        setShouldLoad(isLocal);
+        const isLocalQwen = settings.provider === 'qwen';
+        setShouldLoad(isLocalQwen);
 
-        if (isLocal) {
-            console.log('[AI Bridge] Local provider selected, loading WebView');
+        if (isLocalQwen) {
+            console.log('[AI Bridge] Qwen (WebView) selected, loading WebView');
         } else {
-            console.log('[AI Bridge] Cloud provider selected, skipping WebView');
-            aiStore.setState({ status: 'READY', detail: 'Cloud mode' });
+            console.log('[AI Bridge] Provider is:', settings.provider, '- Skipping legacy WebView bridge');
         }
     }, []);
 

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ScrollView, View, Text, StyleSheet, RefreshControl, Platform } from 'react-native';
+import React from 'react';
+import { ScrollView, View, Text, StyleSheet, RefreshControl, Platform, Image, Dimensions } from 'react-native';
 import { useTheme } from '../../core/theme';
 import { MoodNote, GroupedNotes } from '../../core/models';
 import { NoteCard } from '../components/NoteCard';
@@ -45,39 +45,49 @@ export const TimelineView = ({ notes, isMultiSelect, selectedIds, onSelect, onRe
     const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
 
     return (
-        <ScrollView
-            style={styles.container}
-            contentContainerStyle={styles.content}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.colors.accent} />}
-        >
-            {sortedDates.map(date => (
-                <View key={date} style={styles.dateGroup}>
-                    <View style={styles.dateHeaderContainer}>
-                        <Text style={[
-                            styles.dateHeader,
-                            { color: theme.colors.secondaryText },
-                            theme.isHandDrawn && theme.typography.title,
-                            theme.isHandDrawn && { fontSize: 18, fontWeight: '400', opacity: 0.8 }
-                        ]}>
-                            {getDateHeader(date)}
-                        </Text>
-                        <View style={[styles.headerLine, { backgroundColor: theme.colors.divider, opacity: 0.3 }]} />
+        <View style={{ flex: 1 }}>
+            <ScrollView
+                style={styles.container}
+                contentContainerStyle={styles.content}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.colors.accent} />}
+            >
+                {sortedDates.map(date => (
+                    <View key={date} style={styles.dateGroup}>
+                        <View style={styles.dateHeaderContainer}>
+                            <Text style={[
+                                styles.dateHeader,
+                                { color: theme.colors.secondaryText },
+                                theme.isHandDrawn && theme.typography.title,
+                                theme.isHandDrawn && { fontSize: 18, fontWeight: '400', opacity: 0.8 }
+                            ]}>
+                                {getDateHeader(date)}
+                            </Text>
+                            <View style={[styles.headerLine, { backgroundColor: theme.colors.divider, opacity: 0.3 }]} />
+                        </View>
+                        {grouped[date].map(note => (
+                            <NoteCard
+                                key={note.id}
+                                note={note}
+                                allNotes={notes}
+                                isMultiSelect={isMultiSelect}
+                                isSelected={selectedIds.includes(note.id)}
+                                onSelect={onSelect}
+                                onRefresh={onRefresh}
+                                onSetFollowUp={onSetFollowUp}
+                            />
+                        ))}
                     </View>
-                    {grouped[date].map(note => (
-                        <NoteCard
-                            key={note.id}
-                            note={note}
-                            allNotes={notes}
-                            isMultiSelect={isMultiSelect}
-                            isSelected={selectedIds.includes(note.id)}
-                            onSelect={onSelect}
-                            onRefresh={onRefresh}
-                            onSetFollowUp={onSetFollowUp}
-                        />
-                    ))}
-                </View>
-            ))}
-        </ScrollView>
+                ))}
+            </ScrollView>
+
+            <View style={styles.bgContainer} pointerEvents="none">
+                <Image
+                    source={require('../../../assets/mushroom.png')}
+                    style={styles.bgMushroom}
+                    resizeMode="contain"
+                />
+            </View>
+        </View>
     );
 };
 
@@ -105,5 +115,18 @@ const styles = StyleSheet.create({
     headerLine: {
         flex: 1,
         height: 1,
+    },
+    bgContainer: {
+        position: 'absolute',
+        right: 10,
+        bottom: 10,
+        width: Dimensions.get('window').height / 4,
+        height: Dimensions.get('window').height / 4,
+        opacity: 0.5,
+        zIndex: -1,
+    },
+    bgMushroom: {
+        width: '100%',
+        height: '100%',
     },
 });

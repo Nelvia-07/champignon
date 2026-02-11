@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Modal } from 'react-native';
 
 import { useTheme } from '../../core/theme';
@@ -8,11 +8,12 @@ import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { MoodNote, MoodType, Tag } from '../../core/models';
 
 import { format, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { useFocusEffect } from 'expo-router';
 import { MoodIcon } from '../components/MoodIcon';
 import { Sparkles, Send, ChevronDown } from 'lucide-react-native';
 
 import { aiService } from '../../core/ai';
-import { getAllPresetTags } from '../../core/storage';
+import { saveNote, deleteNotes, updateNoteContent, getPrompt, getAllPresetTags, getSummaryPresets } from '../../core/storage';
 import { getTagStyles } from '../../core/utils';
 
 
@@ -41,17 +42,31 @@ export const CalendarView = ({ notes }: Props) => {
     const { theme } = useTheme();
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [aiPrompt, setAiPrompt] = useState('');
+
+    useEffect(() => {
+        const p = getPrompt('summary');
+        setAiPrompt(p || '用一百字左右，总结我这个月所有笔记中与理财相关的内容，总结我的收支情况和理财习惯');
+    }, []);
     const [aiResult, setAiResult] = useState('');
     const [isAiLoading, setIsAiLoading] = useState(false);
     const [presetTags, setPresetTags] = useState<Tag[]>([]);
     const [isAiInputFullscreen, setIsAiInputFullscreen] = useState(false);
+    const [summaryPresets, setSummaryPresets] = useState<{ title: string, prompt: string }[]>([]);
 
 
 
-    // Load preset tags on mount
-    React.useEffect(() => {
-        setPresetTags(getAllPresetTags());
-    }, []);
+    // Refresh presets when screen is focused
+    useFocusEffect(
+        useCallback(() => {
+            const savedPresets = getSummaryPresets();
+            if (savedPresets.length === 0) {
+                setSummaryPresets([{ title: '理财分析', prompt: '用一百字左右，分析我这一阶段与理财相关的内容，总结我的收支情况和理财习惯。' }]);
+            } else {
+                setSummaryPresets(savedPresets);
+            }
+            setPresetTags(getAllPresetTags());
+        }, [])
+    );
 
     const markedDates = useMemo(() => {
         const marks: any = {};
@@ -237,21 +252,24 @@ export const CalendarView = ({ notes }: Props) => {
                     </View>
 
                     <View style={styles.promptSuggestions}>
-                        <TouchableOpacity
-                            style={[
-                                styles.promptChip,
-                                {
-                                    backgroundColor: aiPrompt.includes('理财') ? theme.colors.accent + '30' : theme.colors.divider + '50',
-                                    borderColor: aiPrompt.includes('理财') ? theme.colors.accent : (theme.isHandDrawn ? theme.colors.divider : 'rgba(0,0,0,0.2)'),
-                                    borderWidth: 1,
-                                }
-                            ]}
-                            onPress={() => {
-                                setAiPrompt('用一百字左右，分析我这个月所有笔记中与理财相关的内容，总结我的收支情况和理财习惯');
-                            }}
-                        >
-                            <Text style={[styles.promptChipText, { color: aiPrompt.includes('理财') ? theme.colors.accent : theme.colors.text }]}>理财分析</Text>
-                        </TouchableOpacity>
+                        {summaryPresets.map((preset, index) => (
+                            <TouchableOpacity
+                                key={index}
+                                style={[
+                                    styles.promptChip,
+                                    {
+                                        backgroundColor: theme.colors.divider + '40',
+                                        borderColor: 'transparent',
+                                        borderWidth: 1,
+                                    }
+                                ]}
+                                onPress={() => setAiPrompt(preset.prompt)}
+                            >
+                                <Text style={[styles.promptChipText, { color: theme.colors.text, fontWeight: '400' }]}>
+                                    {preset.title}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
                     </View>
 
                     <View style={styles.aiInputRow}>
@@ -382,7 +400,7 @@ const styles = StyleSheet.create({
     promptChip: {
         paddingHorizontal: 12,
         paddingVertical: 6,
-        borderRadius: 16,
+        borderRadius: 20,
     },
     promptChipText: {
         fontSize: 12,

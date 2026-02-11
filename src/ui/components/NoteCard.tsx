@@ -3,13 +3,15 @@ import { View, Text, StyleSheet, TouchableOpacity, Image as RNImage, Modal as RN
 import { useTheme } from '../../core/theme';
 import { MoreHorizontal, Trash2, Tag, ChevronDown, ChevronUp, Plus, MessageCircle, Smile, Pencil, Sparkles, Copy } from 'lucide-react-native';
 import { MoodNote, MoodType, Tag as TagModel } from '../../core/models';
-import { updateNoteContent, deleteNotes, updateNoteTags, getAllPresetTags, updateNoteMood, updateNoteMoodAndTags } from '../../core/storage';
+import { updateNoteContent, updateNoteTimestamp, deleteNotes, updateNoteTags, getAllPresetTags, updateNoteMood, updateNoteMoodAndTags } from '../../core/storage';
 import { format } from 'date-fns';
-import { Alert, Platform } from 'react-native';
+import { zhCN } from 'date-fns/locale';
+import { Alert, Platform, KeyboardAvoidingView } from 'react-native';
 import { MoodIcon } from './MoodIcon';
 import { getTagStyles, lightenColor, getMoodColor } from '../../core/utils';
 import { aiService } from '../../core/ai';
 import { aiStore } from '../../core/ai/store';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Clipboard from 'expo-clipboard';
 import { RainbowText } from './RainbowText';
 
@@ -38,6 +40,8 @@ export const NoteCard = ({ note, allNotes, isSelected, isMultiSelect, onSelect, 
     const [isMoodSelecting, setIsMoodSelecting] = useState(false);
     const [followUpsExpanded, setFollowUpsExpanded] = useState(false);
     const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+    const [editTimestamp, setEditTimestamp] = useState(new Date(note.timestamp));
+    const [showEditDatePicker, setShowEditDatePicker] = useState(false);
     const [aiState, setAiState] = useState(aiStore.getState());
 
     const moreBtnRef = useRef<View>(null);
@@ -228,7 +232,7 @@ export const NoteCard = ({ note, allNotes, isSelected, isMultiSelect, onSelect, 
                                 opacity: 0.7,
                             }
                         ]}>
-                            {format(new Date(note.timestamp), 'HH:mm')}
+                            {format(new Date(note.timestamp), 'MM月dd日', { locale: zhCN })}
                         </Text>
                         {aiState.status === 'BUSY' && aiState.analyzingNoteId === note.id && (
                             <View style={{ marginLeft: 4 }}>
@@ -333,11 +337,12 @@ export const NoteCard = ({ note, allNotes, isSelected, isMultiSelect, onSelect, 
                                         onPress={() => {
                                             setEditingNoteId(f.id);
                                             setEditContent(f.content);
+                                            setEditTimestamp(new Date(f.timestamp));
                                             setIsEditing(true);
                                         }}
                                     >
                                         <Text style={[styles.followUpTime, { color: theme.colors.secondaryText }, theme.isHandDrawn && theme.typography.number, theme.isHandDrawn && { fontSize: 12 }]}>
-                                            {format(new Date(f.timestamp), 'MM-dd HH:mm')}
+                                            {format(new Date(f.timestamp), 'MM-dd')}
                                         </Text>
                                         <Text
                                             style={[styles.followUpContent, { color: theme.colors.text }, theme.isHandDrawn && theme.typography.body, theme.isHandDrawn && { fontSize: 14, lineHeight: 20 }]}
@@ -372,39 +377,82 @@ export const NoteCard = ({ note, allNotes, isSelected, isMultiSelect, onSelect, 
             <RNModal visible={isEditing} transparent={true} animationType="none" onRequestClose={() => setIsEditing(false)} statusBarTranslucent={true}>
                 <View style={styles.modalOverlay}>
                     <TouchableOpacity style={styles.overlayClose} activeOpacity={1} onPress={() => { setIsEditing(false); setEditingNoteId(null); }} />
-                    <Animated.View
-                        style={[
-                            styles.halfModalContainer,
-                            {
-                                backgroundColor: theme.colors.cardBackground,
-                                transform: [{ translateY: pan }]
-                            }
-                        ]}
-                        {...panResponder.panHandlers}
+                    <KeyboardAvoidingView
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                        style={{ width: '100%', height: '80%', position: 'absolute', bottom: 0 }}
                     >
-                        <View style={styles.modalHandle} />
-                        <View style={styles.editHeader}>
-                            <TouchableOpacity onPress={() => { setIsEditing(false); setEditingNoteId(null); }}>
-                                <Text style={{ color: theme.colors.secondaryText }}>取消</Text>
+                        <Animated.View
+                            style={[
+                                styles.halfModalContainer,
+                                {
+                                    backgroundColor: theme.colors.cardBackground,
+                                    transform: [{ translateY: pan }],
+                                    height: '100%'
+                                }
+                            ]}
+                            {...panResponder.panHandlers}
+                        >
+                            <View style={styles.modalHandle} />
+                            <View style={styles.editHeader}>
+                                <TouchableOpacity onPress={() => { setIsEditing(false); setEditingNoteId(null); }}>
+                                    <Text style={{ color: theme.colors.secondaryText }}>取消</Text>
+                                </TouchableOpacity>
+                                <Text style={[styles.editTitle, { color: theme.colors.text }]}>编辑记录</Text>
+                                <TouchableOpacity onPress={async () => {
+                                    const targetId = editingNoteId || note.id;
+                                    await updateNoteContent(targetId, editContent);
+                                    updateNoteTimestamp(targetId, editTimestamp.toISOString());
+                                    setIsEditing(false);
+                                    setEditingNoteId(null);
+                                    onRefresh();
+                                }}>
+                                    <Text style={{ color: theme.colors.accent, fontWeight: 'bold' }}>完成</Text>
+                                </TouchableOpacity>
+                            </View>
+                            <TouchableOpacity
+                                style={[styles.editTimestampRow, showEditDatePicker && { backgroundColor: theme.colors.accent + '10', borderRadius: 10, paddingHorizontal: 10 }]}
+                                onPress={() => setShowEditDatePicker(!showEditDatePicker)}
+                            >
+                                <Text style={{ color: theme.colors.secondaryText, fontSize: 13 }}>日期：</Text>
+                                <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '500' }}>
+                                    {editTimestamp.getFullYear()}年{editTimestamp.getMonth() + 1}月{editTimestamp.getDate()}日
+                                </Text>
                             </TouchableOpacity>
-                            <Text style={[styles.editTitle, { color: theme.colors.text }]}>编辑记录</Text>
-                            <TouchableOpacity onPress={async () => {
-                                await updateNoteContent(editingNoteId || note.id, editContent);
-                                setIsEditing(false);
-                                setEditingNoteId(null);
-                                onRefresh();
-                            }}>
-                                <Text style={{ color: theme.colors.accent, fontWeight: 'bold' }}>完成</Text>
-                            </TouchableOpacity>
-                        </View>
-                        <TextInput
-                            style={[styles.editInput, { color: theme.colors.text }]}
-                            multiline
-                            value={editContent}
-                            onChangeText={setEditContent}
-                            autoFocus
-                        />
-                    </Animated.View>
+                            <TextInput
+                                style={[styles.editInput, { color: theme.colors.text }]}
+                                multiline
+                                value={editContent}
+                                onChangeText={setEditContent}
+                                onFocus={() => setShowEditDatePicker(false)}
+                                autoFocus
+                            />
+
+                            {/* Persistent Date Picker for consistency */}
+                            {showEditDatePicker && (
+                                <View style={[styles.pickerOverlay, { backgroundColor: theme.colors.cardBackground }]}>
+                                    <View style={styles.pickerHeader}>
+                                        <TouchableOpacity onPress={() => setShowEditDatePicker(false)}>
+                                            <Text style={{ color: theme.colors.accent, fontWeight: '600', fontSize: 16 }}>完成</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                    <DateTimePicker
+                                        value={editTimestamp}
+                                        mode="date"
+                                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                        locale="zh-CN"
+                                        onChange={(event, selectedDate) => {
+                                            if (selectedDate) {
+                                                setEditTimestamp(selectedDate);
+                                            }
+                                            if (Platform.OS === 'android') {
+                                                setShowEditDatePicker(false);
+                                            }
+                                        }}
+                                    />
+                                </View>
+                            )}
+                        </Animated.View>
+                    </KeyboardAvoidingView>
                 </View>
             </RNModal>
 
@@ -444,6 +492,7 @@ export const NoteCard = ({ note, allNotes, isSelected, isMultiSelect, onSelect, 
                             setIsMenuVisible(false);
                             setEditingNoteId(note.id);
                             setEditContent(note.content);
+                            setEditTimestamp(new Date(note.timestamp));
                             setIsEditing(true);
                         }}>
                             <Pencil size={18} color={theme.colors.text} />
@@ -532,6 +581,7 @@ export const NoteCard = ({ note, allNotes, isSelected, isMultiSelect, onSelect, 
                     </View>
                 </View>
             </RNModal>
+
         </View >
     );
 };
@@ -713,6 +763,24 @@ const styles = StyleSheet.create({
         textAlignVertical: 'top',
         paddingTop: 10,
     },
+    pickerOverlay: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: '#FFF',
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(0,0,0,0.05)',
+        zIndex: 2000,
+        paddingBottom: 20,
+    },
+    pickerHeader: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        padding: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.05)',
+    },
     menuOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.1)',
@@ -776,5 +844,30 @@ const styles = StyleSheet.create({
     moodOption: {
         alignItems: 'center',
         padding: 10,
-    }
+    },
+    editTimestampRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 8,
+        paddingHorizontal: 4,
+        gap: 4,
+    },
+    editTimeBtn: {
+        backgroundColor: '#F0F0F0',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 8,
+    },
+    editTimeBtnText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#555',
+    },
+    editTimeValue: {
+        fontSize: 16,
+        fontWeight: '600',
+        minWidth: 40,
+        textAlign: 'center',
+        color: '#333',
+    },
 });

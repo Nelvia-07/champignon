@@ -7,6 +7,7 @@ interface AIState {
     mirror?: string;
     detail?: string;
     analyzingNoteId?: string | null;
+    lastLog?: string;
 }
 
 type Listener = (state: AIState) => void;
@@ -18,6 +19,7 @@ class AIStore {
         error: null,
         mirror: '',
         detail: '',
+        lastLog: '',
     };
     private listeners = new Set<Listener>();
 

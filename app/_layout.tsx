@@ -5,13 +5,24 @@ import { initDatabase } from '../src/core/storage';
 import { AIEngineBridge } from '../src/ui/components/AIEngineBridge';
 import * as SplashScreen from 'expo-splash-screen';
 
+import { useFonts, DancingScript_700Bold } from '@expo-google-fonts/dancing-script';
+
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+    const [fontsLoaded] = useFonts({
+        DancingScript_700Bold,
+    });
+
     useEffect(() => {
-        initDatabase();
-        SplashScreen.hideAsync();
-    }, []);
+        if (fontsLoaded) {
+            SplashScreen.hideAsync();
+        }
+    }, [fontsLoaded]);
+
+    if (!fontsLoaded) {
+        return null;
+    }
 
     return (
         <ThemeProvider>

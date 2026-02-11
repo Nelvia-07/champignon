@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, SafeAreaView, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { useTheme } from '../src/core/theme';
-import { ChevronLeft, Save, RefreshCcw, Wifi, WifiOff, Maximize2, Check, X } from 'lucide-react-native';
+import { ChevronLeft, Save, RefreshCcw, Wifi, WifiOff, Maximize2, Check, X, Download } from 'lucide-react-native';
+import { Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { aiService } from '../src/core/ai';
 import { AISettings, AIProviderType } from '../src/core/ai/types';
@@ -15,7 +16,7 @@ export default function AISettingsScreen() {
     const { theme } = useTheme();
     const router = useRouter();
     const [settings, setSettings] = useState<AISettings>({
-        provider: 'qwen',
+        provider: 'llama',
         geminiApiKey: '',
         deepseekApiKey: '',
         deepseekModel: 'deepseek-chat',
@@ -23,7 +24,6 @@ export default function AISettingsScreen() {
     });
 
     const [aiState, setAiState] = useState(aiStore.getState());
-    const [isPromptFullScreen, setIsPromptFullScreen] = useState(false);
 
     useEffect(() => {
         const currentSettings = aiService.getSettings();
@@ -52,14 +52,20 @@ export default function AISettingsScreen() {
 
     const getStatusText = () => {
         if (isCloudProvider) {
-            return <Text style={{ color: theme.colors.text }}>🌐 联网模式</Text>;
+            return <Text style={[{ color: theme.colors.text }, theme.isHandDrawn && theme.typography.body]}>🌐 联网模式</Text>;
         }
+
+        // Stabilize: prioritize progress display during download or busy states
+        const hasProgress = aiState.progress > 0 && aiState.progress <= 100;
+        if (aiState.status === 'DOWNLOADING' || (aiState.status === 'BUSY' && hasProgress)) {
+            return <Text style={[{ color: theme.colors.text }, theme.isHandDrawn && theme.typography.body]}>⏳ 下载中...</Text>;
+        }
+
         switch (aiState.status) {
-            case 'READY': return <Text style={{ color: theme.colors.text }}>✅ 已就绪</Text>;
-            case 'DOWNLOADING': return <Text style={{ color: theme.colors.text }}>⏳ 下载中 {Math.round(aiState.progress)}%</Text>;
-            case 'BUSY': return <RainbowText text="⚙️ 加载中..." style={StyleSheet.flatten([styles.statusText, { color: theme.colors.text, fontWeight: 'bold' }])} />;
-            case 'ERROR': return <Text style={{ color: theme.colors.text }}>❌ {aiState.error || '连接失败'}</Text>;
-            default: return <Text style={{ color: theme.colors.text }}>⚪ 未初始化</Text>;
+            case 'READY': return <Text style={[{ color: theme.colors.text }, theme.isHandDrawn && theme.typography.body]}>✅ 已就绪</Text>;
+            case 'BUSY': return <RainbowText text="⚙️ 加载中..." style={StyleSheet.flatten([styles.statusText, { color: theme.colors.text, fontWeight: 'bold' }, theme.isHandDrawn && theme.typography.body])} />;
+            case 'ERROR': return <Text style={[{ color: theme.colors.text }, theme.isHandDrawn && theme.typography.body]}>❌ {aiState.error || '连接失败'}</Text>;
+            default: return <Text style={[{ color: theme.colors.text }, theme.isHandDrawn && theme.typography.body]}>⚪ 未初始化</Text>;
         }
     };
 
@@ -78,41 +84,73 @@ export default function AISettingsScreen() {
             <ScrollView style={styles.content}>
                 {/* Status Card */}
                 <View style={[styles.statusCard, { backgroundColor: theme.colors.cardBackground }]}>
-                    {isCloudProvider ? (
-                        <Wifi size={20} color={theme.colors.accent} />
-                    ) : (
-                        <WifiOff size={20} color={aiState.status === 'READY' ? '#4CAF50' : theme.colors.secondaryText} />
-                    )}
-                    <View style={styles.statusText}>
-                        {getStatusText()}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                        {isCloudProvider ? (
+                            <Wifi size={20} color={theme.colors.accent} />
+                        ) : (
+                            <WifiOff size={20} color={aiState.status === 'READY' ? '#4CAF50' : theme.colors.secondaryText} />
+                        )}
+                        <View style={styles.statusText}>
+                            {getStatusText()}
+                        </View>
                     </View>
-                    {!isCloudProvider && (aiState.status === 'ERROR' || aiState.status === 'IDLE') && (
-                        <TouchableOpacity
-                            onPress={() => QwenLocalProvider.retry()}
-                            style={[styles.retryBtn, { backgroundColor: theme.colors.accent }]}
-                        >
-                            <RefreshCcw size={14} color="#fff" />
-                            <Text style={styles.retryText}>重试</Text>
-                        </TouchableOpacity>
+                    {!isCloudProvider && (
+                        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
+                            {(aiState.status === 'ERROR' || aiState.status === 'IDLE' || aiState.status === 'READY') && (
+                                <TouchableOpacity
+                                    onPress={async () => {
+                                        if (settings.provider === 'llama') {
+                                            const { LlamaLocalProvider } = await import('../src/core/ai/providers/LlamaLocalProvider');
+                                            await LlamaLocalProvider.initialize();
+                                        } else {
+                                            QwenLocalProvider.retry();
+                                        }
+                                    }}
+                                    style={[styles.retryBtn, { backgroundColor: theme.colors.accent }]}
+                                >
+                                    <RefreshCcw size={14} color="#fff" />
+                                    <Text style={styles.retryText}>重试</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
                     )}
+
+                    {(aiState.status === 'DOWNLOADING' || (aiState.progress > 0 && aiState.progress < 1)) && (
+                        <View style={styles.progressContainer}>
+                            <View style={[styles.progressBar, { backgroundColor: theme.colors.divider }]}>
+                                <View style={[styles.progressFill, { width: `${aiState.progress * 100}%`, backgroundColor: theme.colors.accent }]} />
+                            </View>
+                            <Text style={[styles.progressText, { color: theme.colors.secondaryText }]}>
+                                {Math.round(aiState.progress * 100)}%
+                            </Text>
+                        </View>
+                    )}
+
+                    {aiState.lastLog ? (
+                        <View style={[styles.statusTextContainer, { borderTopColor: theme.colors.divider + '50', borderTopWidth: 1, marginTop: 10, paddingTop: 10 }]}>
+                            <Text style={{ color: theme.colors.secondaryText, fontSize: 12, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>
+                                {aiState.lastLog}
+                            </Text>
+                        </View>
+                    ) : null}
                 </View>
 
                 {/* Provider Selection */}
                 <View style={[styles.section, { backgroundColor: theme.colors.cardBackground }]}>
                     <Text style={[styles.sectionTitle, { color: theme.colors.secondaryText }, theme.isHandDrawn && theme.typography.caption]}>AI 模型</Text>
 
-                    {/* Qwen Local */}
+                    {/* Llama Local */}
                     <TouchableOpacity
                         style={styles.optionRow}
-                        onPress={() => setSettings({ ...settings, provider: 'qwen' })}
+                        onPress={() => setSettings({ ...settings, provider: 'llama' })}
                     >
                         <View style={{ flex: 1 }}>
-                            <Text style={[styles.optionText, { color: theme.colors.text }, theme.isHandDrawn && theme.typography.body]}>Qwen 本地模型</Text>
+                            <Text style={[styles.optionText, { color: theme.colors.text }, theme.isHandDrawn && theme.typography.body]}>Llama 本地模型 (推荐)</Text>
                             <Text style={{ fontSize: 12, color: theme.colors.secondaryText, marginTop: 2 }}>
-                                离线使用，无需 API Key
+                                离线使用，效果更佳，无需 API Key
                             </Text>
                         </View>
-                        <View style={[styles.radio, settings.provider === 'qwen' && { backgroundColor: theme.colors.accent }]} />
+                        <View style={[styles.radio, settings.provider === 'llama' && { backgroundColor: theme.colors.accent }]} />
                     </TouchableOpacity>
 
                     {/* DeepSeek */}
@@ -121,8 +159,8 @@ export default function AISettingsScreen() {
                         onPress={() => setSettings({ ...settings, provider: 'deepseek' })}
                     >
                         <View style={{ flex: 1 }}>
-                            <Text style={[styles.optionText, { color: theme.colors.text }]}>DeepSeek (联网)</Text>
-                            <Text style={{ fontSize: 12, color: theme.colors.secondaryText, marginTop: 2 }}>
+                            <Text style={[styles.optionText, { color: theme.colors.text }, theme.isHandDrawn && theme.typography.body]}>DeepSeek (联网)</Text>
+                            <Text style={[{ fontSize: 12, color: theme.colors.secondaryText, marginTop: 2 }, theme.isHandDrawn && theme.typography.caption]}>
                                 高质量中文模型，需要 API Key
                             </Text>
                         </View>
@@ -135,8 +173,8 @@ export default function AISettingsScreen() {
                         onPress={() => setSettings({ ...settings, provider: 'gemini' })}
                     >
                         <View style={{ flex: 1 }}>
-                            <Text style={[styles.optionText, { color: theme.colors.text }]}>Google Gemini (联网)</Text>
-                            <Text style={{ fontSize: 12, color: theme.colors.secondaryText, marginTop: 2 }}>
+                            <Text style={[styles.optionText, { color: theme.colors.text }, theme.isHandDrawn && theme.typography.body]}>Google Gemini (联网)</Text>
+                            <Text style={[{ fontSize: 12, color: theme.colors.secondaryText, marginTop: 2 }, theme.isHandDrawn && theme.typography.caption]}>
                                 需要 API Key，支持翻墙
                             </Text>
                         </View>
@@ -147,16 +185,16 @@ export default function AISettingsScreen() {
                 {/* DeepSeek Config */}
                 {settings.provider === 'deepseek' && (
                     <View style={[styles.section, { backgroundColor: theme.colors.cardBackground }]}>
-                        <Text style={[styles.sectionTitle, { color: theme.colors.secondaryText }]}>DeepSeek 配置</Text>
+                        <Text style={[styles.sectionTitle, { color: theme.colors.secondaryText }, theme.isHandDrawn && theme.typography.caption]}>DeepSeek 配置</Text>
                         <TextInput
-                            style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.divider }]}
+                            style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.divider }, theme.isHandDrawn && theme.typography.body]}
                             placeholder="输入 DeepSeek API Key"
                             placeholderTextColor={theme.colors.secondaryText}
                             value={settings.deepseekApiKey}
                             onChangeText={(val) => setSettings({ ...settings, deepseekApiKey: val })}
                             secureTextEntry
                         />
-                        <Text style={{ fontSize: 12, color: theme.colors.secondaryText, marginTop: 12, marginBottom: 8 }}>
+                        <Text style={[{ fontSize: 12, color: theme.colors.secondaryText, marginTop: 12, marginBottom: 8 }, theme.isHandDrawn && theme.typography.caption]}>
                             选择模型
                         </Text>
                         <View style={{ flexDirection: 'row', gap: 12 }}>
@@ -178,7 +216,7 @@ export default function AISettingsScreen() {
                                 ]}
                                 onPress={() => setSettings({ ...settings, deepseekModel: 'deepseek-reasoner' })}
                             >
-                                <Text style={{ color: settings.deepseekModel === 'deepseek-reasoner' ? theme.colors.accent : theme.colors.text }}>
+                                <Text style={[{ color: settings.deepseekModel === 'deepseek-reasoner' ? theme.colors.accent : theme.colors.text }, theme.isHandDrawn && theme.typography.body]}>
                                     DeepSeek R1
                                 </Text>
                             </TouchableOpacity>
@@ -189,9 +227,9 @@ export default function AISettingsScreen() {
                 {/* Gemini Config */}
                 {settings.provider === 'gemini' && (
                     <View style={[styles.section, { backgroundColor: theme.colors.cardBackground }]}>
-                        <Text style={[styles.sectionTitle, { color: theme.colors.secondaryText }]}>Gemini 配置</Text>
+                        <Text style={[styles.sectionTitle, { color: theme.colors.secondaryText }, theme.isHandDrawn && theme.typography.caption]}>Gemini 配置</Text>
                         <TextInput
-                            style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.divider }]}
+                            style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.divider }, theme.isHandDrawn && theme.typography.body]}
                             placeholder="输入 Gemini API Key"
                             placeholderTextColor={theme.colors.secondaryText}
                             value={settings.geminiApiKey}
@@ -201,87 +239,6 @@ export default function AISettingsScreen() {
                     </View>
                 )}
 
-                {/* Custom Prompt */}
-                <View style={[styles.section, { backgroundColor: theme.colors.cardBackground }]}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                        <Text style={[styles.sectionTitle, { color: theme.colors.secondaryText, marginBottom: 0 }, theme.isHandDrawn && theme.typography.caption]}>自定义提示词</Text>
-                        <TouchableOpacity
-                            onPress={() => setIsPromptFullScreen(true)}
-                            style={{ padding: 4 }}
-                        >
-                            <Maximize2 size={18} color={theme.colors.accent} />
-                        </TouchableOpacity>
-                    </View>
-
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                        <Text style={{ fontSize: 12, color: theme.colors.secondaryText }}>
-                            使用 {"${text}"} 和 {"${presetTags}"} 作为占位符
-                        </Text>
-                        <TouchableOpacity onPress={() => setSettings({ ...settings, customPrompt: DEFAULT_AI_PROMPT })}>
-                            <Text style={{ fontSize: 12, color: theme.colors.accent }}>重置默认</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    <TouchableOpacity
-                        activeOpacity={0.7}
-                        onPress={() => setIsPromptFullScreen(true)}
-                        style={[styles.textArea, { borderColor: theme.colors.divider, padding: 0, overflow: 'hidden' }]}
-                    >
-                        <View pointerEvents="none" style={{ padding: 16 }}>
-                            <TextInput
-                                style={[{ color: theme.colors.text, fontSize: 14, height: '100%' }, theme.isHandDrawn && theme.typography.body, theme.isHandDrawn && { fontSize: 14 }]}
-                                multiline
-                                numberOfLines={10}
-                                placeholder="留空即使用默认提示词"
-                                placeholderTextColor={theme.colors.secondaryText}
-                                value={settings.customPrompt}
-                                editable={false}
-                            />
-                        </View>
-                    </TouchableOpacity>
-                </View>
-
-                {/* Prompt Full Screen Modal */}
-                <Modal
-                    visible={isPromptFullScreen}
-                    animationType="slide"
-                    statusBarTranslucent
-                >
-                    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-                        <SafeAreaView style={{ flex: 1 }}>
-                            <KeyboardAvoidingView
-                                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                                style={{ flex: 1 }}
-                            >
-                                <View style={styles.fullScreenHeader}>
-                                    <TouchableOpacity onPress={() => setIsPromptFullScreen(false)} style={styles.closeBtn}>
-                                        <X size={24} color={theme.colors.text} />
-                                    </TouchableOpacity>
-                                    <Text style={[styles.title, { color: theme.colors.text }]}>编辑提示词</Text>
-                                    <TouchableOpacity onPress={() => setIsPromptFullScreen(false)} style={styles.saveBtn}>
-                                        <Check size={24} color={theme.colors.accent} />
-                                    </TouchableOpacity>
-                                </View>
-
-                                <View style={styles.fullScreenContent}>
-                                    <TextInput
-                                        style={[styles.fullScreenTextArea, { color: theme.colors.text, backgroundColor: theme.colors.cardBackground }, theme.isHandDrawn && theme.typography.body]}
-                                        multiline
-                                        placeholder="输入自定义提示词..."
-                                        placeholderTextColor={theme.colors.secondaryText}
-                                        value={settings.customPrompt}
-                                        onChangeText={(val) => setSettings({ ...settings, customPrompt: val })}
-                                        autoFocus
-                                        textAlignVertical="top"
-                                    />
-                                    <Text style={{ fontSize: 12, color: theme.colors.secondaryText, marginTop: 12, paddingHorizontal: 4 }}>
-                                        提示：使用 {"${text}"} 代表内容，{"${presetTags}"} 代表标签。
-                                    </Text>
-                                </View>
-                            </KeyboardAvoidingView>
-                        </SafeAreaView>
-                    </View>
-                </Modal>
             </ScrollView>
         </SafeAreaView>
     );
@@ -315,12 +272,9 @@ const styles = StyleSheet.create({
         padding: 16,
     },
     statusCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
         padding: 16,
         borderRadius: 15,
         marginBottom: 16,
-        gap: 12,
     },
     statusText: {
         fontSize: 16,
@@ -400,6 +354,26 @@ const styles = StyleSheet.create({
     fullScreenContent: {
         flex: 1,
         padding: 16,
+    },
+    progressContainer: {
+        marginTop: 15,
+        gap: 8,
+    },
+    progressBar: {
+        height: 6,
+        borderRadius: 3,
+        overflow: 'hidden',
+    },
+    progressFill: {
+        height: '100%',
+        borderRadius: 3,
+    },
+    progressText: {
+        fontSize: 12,
+        textAlign: 'right',
+    },
+    statusTextContainer: {
+        marginTop: 5,
     },
     fullScreenTextArea: {
         flex: 1,

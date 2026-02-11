@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from '../../core/theme';
-import { X, Palette, Tag, Cpu, ChevronDown, Filter, Settings } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch, Image } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme, ThemeType } from '../../core/theme';
+import { X, Palette, Tag, Cpu, ChevronDown, Filter, Settings, Check } from 'lucide-react-native';
 import { Tag as TagModel } from '../../core/models';
 import { useRouter } from 'expo-router';
 
@@ -13,7 +13,8 @@ interface Props {
 }
 
 export const DrawerMenu = ({ onClose, currentFilter, onFilterChange }: Props) => {
-    const { theme, themeType, toggleTheme } = useTheme();
+    const { theme, themeType, setTheme, toggleTheme } = useTheme();
+    const insets = useSafeAreaInsets();
     const router = useRouter();
     const [tags, setTags] = React.useState<TagModel[]>([]);
     const [isFilterExpanded, setIsFilterExpanded] = React.useState(false);
@@ -30,9 +31,15 @@ export const DrawerMenu = ({ onClose, currentFilter, onFilterChange }: Props) =>
     const itemSelectedBg = isHandDrawn ? '#F0EDE8' : '#F0F0F0';
 
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.cardBackground }]} edges={['top']}>
+        <View style={[styles.container, { backgroundColor: theme.colors.cardBackground, paddingTop: Math.max(insets.top, 20) }]}>
             <View style={styles.header}>
-                <Text style={[styles.title, { color: theme.colors.text }, theme.isHandDrawn && theme.typography.title, theme.isHandDrawn && { fontWeight: '400' }]}>个性化</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Image
+                        source={require('../../../assets/favicon.png')}
+                        style={styles.logoIcon}
+                    />
+                    <Text style={[styles.title, { color: theme.colors.text }, theme.isHandDrawn && theme.typography.title, { fontFamily: 'DancingScript_700Bold', fontSize: 32, fontWeight: '400' }]}>Champignon</Text>
+                </View>
                 <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
                     <X size={24} color={theme.colors.text} />
                 </TouchableOpacity>
@@ -110,10 +117,24 @@ export const DrawerMenu = ({ onClose, currentFilter, onFilterChange }: Props) =>
 
                     <TouchableOpacity
                         style={styles.menuIconButton}
-                        onPress={() => { onClose(); router.push('/ai-settings'); }}
+                        onPress={() => {
+                            onClose();
+                            router.push('/ai-settings');
+                        }}
                     >
-                        <Cpu size={20} color={theme.colors.text} />
-                        <Text style={[styles.sectionTitleText, { color: theme.colors.text }]}>AI 设置</Text>
+                        <Cpu size={20} color={theme.colors.accent} strokeWidth={2} />
+                        <Text style={[styles.menuIconText, { color: theme.colors.text }]}>AI 设置</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.menuIconButton}
+                        onPress={() => {
+                            onClose();
+                            router.push('/prompt-management');
+                        }}
+                    >
+                        <Settings size={20} color={theme.colors.accent} strokeWidth={2} />
+                        <Text style={[styles.menuIconText, { color: theme.colors.text }]}>提示词管理</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -129,29 +150,50 @@ export const DrawerMenu = ({ onClose, currentFilter, onFilterChange }: Props) =>
                         </View>
                         <Text style={[styles.sectionTitleText, { color: theme.colors.text }]}>主题风格</Text>
                     </View>
-                    <View style={styles.themeToggleRow}>
-                        <TouchableOpacity
-                            style={[styles.themeOption, themeType === 'handdrawn' && styles.themeOptionActive]}
-                            onPress={() => themeType !== 'handdrawn' && toggleTheme()}
-                        >
-                            <View style={[styles.themeCircle, styles.handDrawnCircle]} />
-                            <Text style={[styles.themeText, { color: theme.colors.text }]}>手账风</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.themeOption, themeType === 'minimalist' && styles.themeOptionActive]}
-                            onPress={() => themeType !== 'minimalist' && toggleTheme()}
-                        >
-                            <View style={[styles.themeCircle, styles.minimalistCircle]} />
-                            <Text style={[styles.themeText, { color: theme.colors.text }]}>简约风</Text>
-                        </TouchableOpacity>
+                    <View style={styles.themeSelectorRow}>
+                        {(['handdrawn', 'minimalist'] as ThemeType[]).map((t) => (
+                            <TouchableOpacity
+                                key={t}
+                                style={[
+                                    styles.themeOption,
+                                    theme.themeType === t && { borderColor: theme.colors.accent, backgroundColor: theme.colors.divider + '20' }
+                                ]}
+                                onPress={() => setTheme(t)}
+                            >
+                                <View style={[
+                                    styles.themeSwatch,
+                                    { backgroundColor: t === 'handdrawn' ? '#F7F5F0' : '#FFFFFF' },
+                                    { borderColor: t === 'handdrawn' ? '#8D6E63' : '#222222', borderStyle: t === 'handdrawn' ? 'dashed' : 'solid' }
+                                ]}>
+                                    {t === 'handdrawn' ? (
+                                        <Palette size={16} color="#8D6E63" />
+                                    ) : (
+                                        <View style={{ width: 14, height: 14, backgroundColor: '#222222', borderRadius: 2 }} />
+                                    )}
+                                    {theme.themeType === t && (
+                                        <View style={[styles.checkBadge, { backgroundColor: theme.colors.accent }]}>
+                                            <Check size={10} color="#FFF" strokeWidth={3} />
+                                        </View>
+                                    )}
+                                </View>
+                                <Text style={[
+                                    styles.themeText,
+                                    { color: theme.themeType === t ? theme.colors.accent : theme.colors.text },
+                                    theme.isHandDrawn && theme.typography.caption,
+                                    { fontSize: 13, marginTop: 6, fontWeight: theme.themeType === t ? 'bold' : 'normal' }
+                                ]}>
+                                    {t === 'handdrawn' ? '手账' : '简约'}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
                     </View>
                 </View>
             </ScrollView>
 
-            <View style={styles.footer}>
-                <Text style={{ color: theme.colors.secondaryText, fontSize: 12 }}>心情树洞 v1.0.0</Text>
+            <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+                <Text style={{ color: theme.colors.secondaryText, fontSize: 12 }}>Champignon v1.0.0</Text>
             </View>
-        </SafeAreaView>
+        </View>
     );
 };
 
@@ -172,6 +214,11 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 22,
         fontWeight: 'bold',
+    },
+    logoIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 8,
     },
     scroll: {
         flex: 1,
@@ -248,39 +295,49 @@ const styles = StyleSheet.create({
         marginBottom: 15,
         opacity: 0.6,
     },
-    themeToggleRow: {
+    themeSelectorRow: {
         flexDirection: 'row',
-        gap: 20,
+        justifyContent: 'space-between',
+        paddingHorizontal: 5,
+        marginTop: 10,
+        gap: 8,
     },
     themeOption: {
+        flex: 1,
         alignItems: 'center',
-        gap: 8,
-        padding: 10,
-        borderRadius: 15,
+        paddingVertical: 12,
+        borderRadius: 16,
         borderWidth: 2,
         borderColor: 'transparent',
     },
-    themeOptionActive: {
-        borderColor: '#D4BFA4',
-        backgroundColor: '#FFF',
+    themeSwatch: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        borderWidth: 2,
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative',
     },
-    themeCircle: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: '#DDD',
+    themeInnerAccent: {
+        width: 14,
+        height: 14,
+        borderRadius: 7,
     },
-    handDrawnCircle: {
-        borderStyle: 'dashed',
-        backgroundColor: '#FDFCFB',
-    },
-    minimalistCircle: {
-        backgroundColor: '#FFF',
+    checkBadge: {
+        position: 'absolute',
+        bottom: -4,
+        right: -4,
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 2,
+        borderColor: '#FFF',
     },
     themeText: {
         fontSize: 13,
-        fontWeight: '500',
     },
     footer: {
         padding: 20,

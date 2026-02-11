@@ -3,7 +3,8 @@ import { View, TextInput, TouchableOpacity, StyleSheet, Text, ActivityIndicator,
 import { useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../core/theme';
-import { Send, XCircle, Image as ImageIcon, Mic, ChevronDown, X, RefreshCcw, Plus } from 'lucide-react-native';
+import { Send, XCircle, Image as ImageIcon, Mic, ChevronDown, X, RefreshCcw, Plus, Calendar } from 'lucide-react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { MoodNote } from '../../core/models';
 import { saveNote, getAllPresetTags, getGeneralSettings } from '../../core/storage';
 import { analyzeNoteInBackground } from '../../core/ai';
@@ -34,6 +35,10 @@ export const InputArea = ({ parentNote, onClearParent, onSuccess }: Props) => {
     const [isRecording, setIsRecording] = useState(false);
     const [aiState, setAiState] = useState(aiStore.getState());
     const [isCollapsed, setIsCollapsed] = useState(true); // Default to true initially
+    const [noteTimestamp, setNoteTimestamp] = useState(new Date());
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    // Track text before voice started so we can append
+    const textBeforeVoiceRef = useRef('');
 
     const pan = useRef(new Animated.Value(0)).current;
 
@@ -44,7 +49,10 @@ export const InputArea = ({ parentNote, onClearParent, onSuccess }: Props) => {
                 Voice.onSpeechEnd = () => setIsRecording(false);
                 Voice.onSpeechResults = (e: any) => {
                     if (e.value && e.value.length > 0) {
-                        setText(prev => prev + (prev.length > 0 ? ' ' : '') + e.value![0]);
+                        // Append voice result to text that existed before voice started
+                        const prefix = textBeforeVoiceRef.current;
+                        const separator = prefix.length > 0 ? ' ' : '';
+                        setText(prefix + separator + e.value[0]);
                     }
                 };
                 Voice.onSpeechError = (e: any) => {
@@ -126,10 +134,14 @@ export const InputArea = ({ parentNote, onClearParent, onSuccess }: Props) => {
             const noteId = Math.random().toString(36).substring(7);
             const presetTags = getAllPresetTags().map(t => t.name);
 
+            // Use the selected date but reset time part to midnight or noon to be clean if desired, 
+            // but keeping it as is for date-only focus in UI.
+            const finalTimestamp = new Date(noteTimestamp);
+
             const newNote: MoodNote = {
                 id: noteId,
                 content: text,
-                timestamp: new Date().toISOString(),
+                timestamp: finalTimestamp.toISOString(),
                 moodType: 'none',
                 tags: [],
                 images: images,
@@ -142,6 +154,7 @@ export const InputArea = ({ parentNote, onClearParent, onSuccess }: Props) => {
 
             setText('');
             setImages([]);
+            setNoteTimestamp(new Date());
             onClearParent();
             setIsFullScreen(false);
             onSuccess();
@@ -207,6 +220,8 @@ export const InputArea = ({ parentNote, onClearParent, onSuccess }: Props) => {
                     return;
                 }
             }
+            // Save current text so we can append voice results to it
+            textBeforeVoiceRef.current = text;
             Voice.start('zh-CN').catch(console.error);
         }
     };
@@ -309,7 +324,7 @@ export const InputArea = ({ parentNote, onClearParent, onSuccess }: Props) => {
             {isCollapsed && !parentNote && !isFullScreen ? (
                 <TouchableOpacity
                     style={[styles.fab, { backgroundColor: theme.colors.accent }]}
-                    onPress={() => setIsFullScreen(true)}
+                    onPress={() => { setText(''); setImages([]); setNoteTimestamp(new Date()); setIsFullScreen(true); }}
                     activeOpacity={0.8}
                 >
                     <Plus size={28} color="#FFF" />
@@ -333,7 +348,16 @@ export const InputArea = ({ parentNote, onClearParent, onSuccess }: Props) => {
                             <SafeAreaView style={{ flex: 1 }}>
                                 <View style={styles.modalHeader}>
                                     <TouchableOpacity style={styles.closeHandle} onPress={() => {
+                                        // Stop voice recognition if active
+                                        if (isRecording && Voice) {
+                                            Voice.stop().catch(console.error);
+                                            setIsRecording(false);
+                                        }
+                                        setShowDatePicker(false);
                                         setIsFullScreen(false);
+                                        setText('');
+                                        setImages([]);
+                                        setNoteTimestamp(new Date());
                                         onClearParent();
                                         // Respect inputAreaDefaultState setting
                                         const settings = getGeneralSettings();
@@ -342,36 +366,60 @@ export const InputArea = ({ parentNote, onClearParent, onSuccess }: Props) => {
                                         <ChevronDown size={32} color={theme.colors.secondaryText} />
                                     </TouchableOpacity>
 
-
-                                    <TouchableOpacity
-                                        style={styles.aiStatusBadge}
-                                        onPress={handleRetryAI}
-                                        activeOpacity={aiState.status === 'ERROR' ? 0.7 : 1}
-                                    >
-                                        <View style={[styles.statusDot, { backgroundColor: aiState.status === 'READY' ? '#4CD964' : aiState.status === 'ERROR' ? '#FF3B30' : '#FFCC00' }]} />
-                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                            {aiState.status === 'BUSY' ? (
-                                                <RainbowText
-                                                    text="解析中..."
-                                                    style={StyleSheet.flatten([styles.statusText, theme.isHandDrawn && theme.typography.caption, theme.isHandDrawn && { fontSize: 11 }])}
-                                                />
-                                            ) : (
-                                                <Text style={[styles.statusText, { color: theme.colors.secondaryText }]}>
-                                                    {aiState.status === 'DOWNLOADING' ? `AI 下载中 ${isNaN(aiState.progress) || aiState.progress === undefined ? 0 : Math.round(aiState.progress * 100)}%` :
-                                                        aiState.status === 'ERROR' ? 'AI 离线 (点击重试)' : '本地 AI 已就绪'}
-                                                </Text>
-                                            )}
-                                        </View>
-                                        {aiState.status === 'ERROR' && <RefreshCcw size={10} color={theme.colors.secondaryText} style={{ marginLeft: 6 }} />}
-                                    </TouchableOpacity>
+                                    <View style={styles.timestampContainer}>
+                                        <TouchableOpacity
+                                            style={[styles.timestampBadge, showDatePicker && { backgroundColor: theme.colors.accent + '20', borderColor: theme.colors.accent, borderWidth: 1 }]}
+                                            onPress={() => setShowDatePicker(!showDatePicker)}
+                                        >
+                                            <Calendar size={14} color={showDatePicker ? theme.colors.accent : theme.colors.secondaryText} style={{ marginRight: 6 }} />
+                                            <Text style={[styles.timestampText, { color: showDatePicker ? theme.colors.accent : theme.colors.secondaryText }]}>
+                                                {noteTimestamp.getFullYear()}年{noteTimestamp.getMonth() + 1}月{noteTimestamp.getDate()}日
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
                                 </View>
-                                {renderInputContent(true)}
+
+                                <TouchableOpacity
+                                    activeOpacity={1}
+                                    style={{ flex: 1 }}
+                                    onPress={() => setShowDatePicker(false)}
+                                >
+                                    {renderInputContent(true)}
+                                </TouchableOpacity>
+
+                                {/* Pickers are placed inside or right next to modal for iOS Z-Index issues */}
+                                {showDatePicker && (
+                                    <View style={[styles.pickerOverlay, { backgroundColor: theme.colors.background }]}>
+                                        <View style={styles.pickerHeader}>
+                                            <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                                                <Text style={{ color: theme.colors.accent, fontWeight: '600', fontSize: 16 }}>完成</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                        <DateTimePicker
+                                            value={noteTimestamp}
+                                            mode="date"
+                                            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                            locale="zh-CN"
+                                            onChange={(event, selectedDate) => {
+                                                if (selectedDate) {
+                                                    const newDate = new Date(noteTimestamp);
+                                                    newDate.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+                                                    setNoteTimestamp(newDate);
+                                                }
+                                                // On Android, we close on change, but on iOS spinner we stay open (so user can scroll year/month/day)
+                                                if (Platform.OS === 'android') {
+                                                    setShowDatePicker(false);
+                                                }
+                                            }}
+                                        />
+                                    </View>
+                                )}
                             </SafeAreaView>
                         </Animated.View>
                     </KeyboardAvoidingView>
                 </RNModal>
             )}
-        </View>
+        </View >
     );
 };
 
@@ -542,5 +590,55 @@ const styles = StyleSheet.create({
     statusText: {
         fontSize: 12,
         fontWeight: '500',
+    },
+    timestampBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F5F5F5',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+    },
+    timestampText: {
+        fontSize: 13,
+        fontWeight: '500',
+    },
+    timestampContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    pickerOverlay: {
+        position: 'absolute',
+        bottom: 0,
+        width: '100%',
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(0,0,0,0.05)',
+        zIndex: 1000,
+        paddingBottom: 20,
+    },
+    pickerHeader: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        padding: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.05)',
+    },
+    timeBtn: {
+        backgroundColor: '#F0F0F0',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 8,
+    },
+    timeBtnText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#555',
+    },
+    timeValue: {
+        fontSize: 18,
+        fontWeight: '600',
+        minWidth: 50,
+        textAlign: 'center',
+        color: '#333',
     },
 });

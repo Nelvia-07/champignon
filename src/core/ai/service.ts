@@ -2,8 +2,9 @@ import { AIProvider, AIAnalysisResult, AISettings, AIProviderType } from './type
 import { LlamaLocalProvider } from './providers/LlamaLocalProvider';
 import { GeminiProvider } from './providers/GeminiProvider';
 import { DeepSeekProvider } from './providers/DeepSeekProvider';
-import { getAISettings } from '../storage';
+import { getAISettings, updateAISettings, getPrompt } from '../storage';
 import { aiStore } from './store';
+import { DEFAULT_AI_PROMPT } from './constants';
 
 class AIService {
     private static instance: AIService;
@@ -12,12 +13,23 @@ class AIService {
 
     private constructor() {
         const savedSettings = getAISettings();
+        console.log('[AI Service] Initializing with provider:', savedSettings.provider);
+
+        // Migrate old 'qwen' provider to the new 'llama' provider
+        let provider: AIProviderType = (savedSettings.provider as AIProviderType) || 'llama';
+
+        if (savedSettings.provider === 'qwen' || !savedSettings.provider) {
+            console.log('[AI Service] Migrating legacy provider to llama');
+            updateAISettings('provider', 'llama');
+            provider = 'llama';
+        }
+
         this.settings = {
-            provider: savedSettings.provider as AIProviderType || 'llama',
+            provider,
             geminiApiKey: savedSettings.geminiApiKey || '',
             deepseekApiKey: savedSettings.deepseekApiKey || '',
             deepseekModel: savedSettings.deepseekModel || 'deepseek-chat',
-            customPrompt: savedSettings.customPrompt || ''
+            customPrompt: getPrompt('analysis') || savedSettings.customPrompt || DEFAULT_AI_PROMPT
         };
         this.provider = this.createProvider(this.settings.provider);
     }
@@ -97,6 +109,10 @@ class AIService {
 
     updateSettings(newSettings: Partial<AISettings>) {
         this.settings = { ...this.settings, ...newSettings };
+        if (newSettings.customPrompt === undefined) {
+            // Refresh prompt from storage if not explicitly provided (e.g. after prompt management update)
+            this.settings.customPrompt = getPrompt('analysis') || DEFAULT_AI_PROMPT;
+        }
         this.provider = this.createProvider(this.settings.provider);
     }
 
