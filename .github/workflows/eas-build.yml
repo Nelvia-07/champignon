@@ -9,8 +9,8 @@ on:
         type: choice
         options:
           - android
-          - ios
-          - all
+          - ios-unsigned
+          - ios-eas
       profile:
         description: 'EAS Build profile'
         required: true
@@ -22,8 +22,10 @@ on:
           - development
 
 jobs:
-  build:
-    name: Install and build
+  # Job for Android and Standard EAS Build
+  eas-build:
+    if: github.event.inputs.platform != 'ios-unsigned'
+    name: EAS Build (${{ github.event.inputs.platform }})
     runs-on: ubuntu-latest
     steps:
       - name: 🏗 Setup repo
@@ -45,4 +47,55 @@ jobs:
         run: npm install
 
       - name: 🚀 Build
-        run: eas build --platform ${{ github.event.inputs.platform }} --profile ${{ github.event.inputs.profile }} --non-interactive
+        run: |
+          PLATFORM=${{ github.event.inputs.platform }}
+          if [ "$PLATFORM" == "ios-eas" ]; then PLATFORM="ios"; fi
+          eas build --platform $PLATFORM --profile ${{ github.event.inputs.profile }} --non-interactive
+
+  # Special Job for Unsigned iOS Build (Free Apple ID / Sideloadly)
+  ios-unsigned-build:
+    if: github.event.inputs.platform == 'ios-unsigned'
+    name: Unsigned iOS Build
+    runs-on: macos-latest
+    steps:
+      - name: 🏗 Setup repo
+        uses: actions/checkout@v4
+
+      - name: 🏗 Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: 📦 Install dependencies
+        run: npm install
+
+      - name: 🏗 Expo Prebuild
+        run: npx expo prebuild --platform ios
+
+      - name: 🚀 Xcode Build (Unsigned)
+        run: |
+          cd ios
+          xcodebuild -workspace *.xcworkspace \
+            -scheme $(ls -d *.xcodeproj | sed 's/\.xcodeproj//') \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            build
+
+      - name: 📦 Package IPA
+        run: |
+          mkdir -p build/Payload
+          cp -r ios/build/Release-iphoneos/*.app build/Payload/
+          cd build
+          zip -r ../unsigned-app.ipa Payload
+
+      - name: 📤 Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-ios-ipa
+          path: unsigned-app.ipa
