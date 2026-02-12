@@ -71,7 +71,9 @@ jobs:
         run: npm install
 
       - name: 🔧 Fix permissions
-        run: chmod -R +x node_modules/.bin
+        run: |
+          chmod -R +x node_modules/.bin
+          find node_modules -type f -name "*.sh" -exec chmod +x {} +
 
       - name: 🏗 Expo Prebuild
         run: npx expo prebuild --platform ios
