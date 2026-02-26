@@ -103,6 +103,28 @@ class AIService {
         }
     }
 
+    public async init() {
+        if (this.settings.provider === 'llama') {
+            try {
+                const downloaded = await LlamaLocalProvider.isModelDownloaded();
+                if (downloaded) {
+                    console.log('[AI Service] Local model found, performing auto-init');
+                    await LlamaLocalProvider.initialize();
+                } else {
+                    console.log('[AI Service] Local model not found, skipping auto-init');
+                }
+            } catch (error) {
+                console.error('[AI Service] Auto-init failed:', error);
+            }
+        }
+    }
+
+    public async deleteModel() {
+        if (this.settings.provider === 'llama') {
+            await LlamaLocalProvider.deleteModel();
+        }
+    }
+
     getSettings(): AISettings {
         return this.settings;
     }

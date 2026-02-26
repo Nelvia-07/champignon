@@ -71,175 +71,203 @@ export default function AISettingsScreen() {
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-                    <ChevronLeft size={24} color={theme.colors.text} />
-                </TouchableOpacity>
-                <Text style={[styles.title, { color: theme.colors.text }]}>AI 设置</Text>
-                <TouchableOpacity onPress={handleSave} style={styles.saveBtn}>
-                    <Save size={24} color={theme.colors.accent} />
-                </TouchableOpacity>
-            </View>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={{ flex: 1 }}
+            >
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+                        <ChevronLeft size={24} color={theme.colors.text} />
+                    </TouchableOpacity>
+                    <Text style={[styles.title, { color: theme.colors.text }]}>AI 设置</Text>
+                    <TouchableOpacity onPress={handleSave} style={styles.saveBtn}>
+                        <Save size={24} color={theme.colors.accent} />
+                    </TouchableOpacity>
+                </View>
 
-            <ScrollView style={styles.content}>
-                {/* Status Card */}
-                <View style={[styles.statusCard, { backgroundColor: theme.colors.cardBackground }]}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                        {isCloudProvider ? (
-                            <Wifi size={20} color={theme.colors.accent} />
-                        ) : (
-                            <WifiOff size={20} color={aiState.status === 'READY' ? '#4CAF50' : theme.colors.secondaryText} />
-                        )}
-                        <View style={styles.statusText}>
-                            {getStatusText()}
-                        </View>
-                    </View>
-                    {!isCloudProvider && (
-                        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
-                            {(aiState.status === 'ERROR' || aiState.status === 'IDLE' || aiState.status === 'READY') && (
-                                <TouchableOpacity
-                                    onPress={async () => {
-                                        if (settings.provider === 'llama') {
-                                            const { LlamaLocalProvider } = await import('../src/core/ai/providers/LlamaLocalProvider');
-                                            await LlamaLocalProvider.initialize();
-                                        } else {
-                                            QwenLocalProvider.retry();
-                                        }
-                                    }}
-                                    style={[styles.retryBtn, { backgroundColor: theme.colors.accent }]}
-                                >
-                                    <RefreshCcw size={14} color="#fff" />
-                                    <Text style={styles.retryText}>重试</Text>
-                                </TouchableOpacity>
+                <ScrollView
+                    style={styles.content}
+                    contentContainerStyle={styles.scrollContent}
+                    keyboardShouldPersistTaps="handled"
+                >
+                    {/* Status Card */}
+                    <View style={[styles.statusCard, { backgroundColor: theme.colors.cardBackground }]}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                            {isCloudProvider ? (
+                                <Wifi size={20} color={theme.colors.accent} />
+                            ) : (
+                                <WifiOff size={20} color={aiState.status === 'READY' ? '#4CAF50' : theme.colors.secondaryText} />
                             )}
-                        </View>
-                    )}
-
-                    {(aiState.status === 'DOWNLOADING' || (aiState.progress > 0 && aiState.progress < 1)) && (
-                        <View style={styles.progressContainer}>
-                            <View style={[styles.progressBar, { backgroundColor: theme.colors.divider }]}>
-                                <View style={[styles.progressFill, { width: `${aiState.progress * 100}%`, backgroundColor: theme.colors.accent }]} />
+                            <View style={styles.statusText}>
+                                {getStatusText()}
                             </View>
-                            <Text style={[styles.progressText, { color: theme.colors.secondaryText }]}>
-                                {Math.round(aiState.progress * 100)}%
+                        </View>
+                        {!isCloudProvider && (
+                            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
+                                {aiState.status === 'READY' && (
+                                    <TouchableOpacity
+                                        onPress={() => {
+                                            Alert.alert('删除模型', '确定要删除已下载的模型文件吗？下次使用将需要重新下载。', [
+                                                { text: '取消', style: 'cancel' },
+                                                {
+                                                    text: '确定删除',
+                                                    style: 'destructive',
+                                                    onPress: async () => {
+                                                        await aiService.deleteModel();
+                                                    }
+                                                }
+                                            ]);
+                                        }}
+                                        style={[styles.retryBtn, { backgroundColor: '#FFEDEB', borderWidth: 1, borderColor: '#FF6B6B' }]}
+                                    >
+                                        <X size={14} color="#FF6B6B" />
+                                        <Text style={[styles.retryText, { color: '#FF6B6B' }]}>删除模型</Text>
+                                    </TouchableOpacity>
+                                )}
+                                {(aiState.status === 'ERROR' || aiState.status === 'IDLE') && (
+                                    <TouchableOpacity
+                                        onPress={async () => {
+                                            if (settings.provider === 'llama') {
+                                                const { LlamaLocalProvider } = await import('../src/core/ai/providers/LlamaLocalProvider');
+                                                await LlamaLocalProvider.initialize();
+                                            } else {
+                                                QwenLocalProvider.retry();
+                                            }
+                                        }}
+                                        style={[styles.retryBtn, { backgroundColor: theme.colors.accent }]}
+                                    >
+                                        <RefreshCcw size={14} color="#fff" />
+                                        <Text style={styles.retryText}>重试</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        )}
+
+                        {(aiState.status === 'DOWNLOADING' || (aiState.progress > 0 && aiState.progress < 1)) && (
+                            <View style={styles.progressContainer}>
+                                <View style={[styles.progressBar, { backgroundColor: theme.colors.divider }]}>
+                                    <View style={[styles.progressFill, { width: `${aiState.progress * 100}%`, backgroundColor: theme.colors.accent }]} />
+                                </View>
+                                <Text style={[styles.progressText, { color: theme.colors.secondaryText }]}>
+                                    {Math.round(aiState.progress * 100)}%
+                                </Text>
+                            </View>
+                        )}
+
+                        {aiState.lastLog ? (
+                            <View style={[styles.statusTextContainer, { borderTopColor: theme.colors.divider + '50', borderTopWidth: 1, marginTop: 10, paddingTop: 10 }]}>
+                                <Text style={{ color: theme.colors.secondaryText, fontSize: 12, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>
+                                    {aiState.lastLog}
+                                </Text>
+                            </View>
+                        ) : null}
+                    </View>
+
+                    {/* Provider Selection */}
+                    <View style={[styles.section, { backgroundColor: theme.colors.cardBackground }]}>
+                        <Text style={[styles.sectionTitle, { color: theme.colors.secondaryText }, theme.isHandDrawn && theme.typography.caption]}>AI 模型</Text>
+
+                        {/* Llama Local */}
+                        <TouchableOpacity
+                            style={styles.optionRow}
+                            onPress={() => setSettings({ ...settings, provider: 'llama' })}
+                        >
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.optionText, { color: theme.colors.text }, theme.isHandDrawn && theme.typography.body]}>Llama 本地模型 (推荐)</Text>
+                                <Text style={{ fontSize: 12, color: theme.colors.secondaryText, marginTop: 2 }}>
+                                    离线使用，效果更佳，无需 API Key
+                                </Text>
+                            </View>
+                            <View style={[styles.radio, settings.provider === 'llama' && { backgroundColor: theme.colors.accent }]} />
+                        </TouchableOpacity>
+
+                        {/* DeepSeek */}
+                        <TouchableOpacity
+                            style={styles.optionRow}
+                            onPress={() => setSettings({ ...settings, provider: 'deepseek' })}
+                        >
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.optionText, { color: theme.colors.text }, theme.isHandDrawn && theme.typography.body]}>DeepSeek (联网)</Text>
+                                <Text style={[{ fontSize: 12, color: theme.colors.secondaryText, marginTop: 2 }, theme.isHandDrawn && theme.typography.caption]}>
+                                    高质量中文模型，需要 API Key
+                                </Text>
+                            </View>
+                            <View style={[styles.radio, settings.provider === 'deepseek' && { backgroundColor: theme.colors.accent }]} />
+                        </TouchableOpacity>
+
+                        {/* Gemini */}
+                        <TouchableOpacity
+                            style={styles.optionRow}
+                            onPress={() => setSettings({ ...settings, provider: 'gemini' })}
+                        >
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.optionText, { color: theme.colors.text }, theme.isHandDrawn && theme.typography.body]}>Google Gemini (联网)</Text>
+                                <Text style={[{ fontSize: 12, color: theme.colors.secondaryText, marginTop: 2 }, theme.isHandDrawn && theme.typography.caption]}>
+                                    需要 API Key，支持翻墙
+                                </Text>
+                            </View>
+                            <View style={[styles.radio, settings.provider === 'gemini' && { backgroundColor: theme.colors.accent }]} />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* DeepSeek Config */}
+                    {settings.provider === 'deepseek' && (
+                        <View style={[styles.section, { backgroundColor: theme.colors.cardBackground }]}>
+                            <Text style={[styles.sectionTitle, { color: theme.colors.secondaryText }, theme.isHandDrawn && theme.typography.caption]}>DeepSeek 配置</Text>
+                            <TextInput
+                                style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.divider }, theme.isHandDrawn && theme.typography.body]}
+                                placeholder="输入 DeepSeek API Key"
+                                placeholderTextColor={theme.colors.secondaryText}
+                                value={settings.deepseekApiKey}
+                                onChangeText={(val) => setSettings({ ...settings, deepseekApiKey: val })}
+                                secureTextEntry
+                            />
+                            <Text style={[{ fontSize: 12, color: theme.colors.secondaryText, marginTop: 12, marginBottom: 8 }, theme.isHandDrawn && theme.typography.caption]}>
+                                选择模型
                             </Text>
+                            <View style={{ flexDirection: 'row', gap: 12 }}>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.modelBtn,
+                                        { borderColor: settings.deepseekModel === 'deepseek-chat' ? theme.colors.accent : theme.colors.divider }
+                                    ]}
+                                    onPress={() => setSettings({ ...settings, deepseekModel: 'deepseek-chat' })}
+                                >
+                                    <Text style={{ color: settings.deepseekModel === 'deepseek-chat' ? theme.colors.accent : theme.colors.text }}>
+                                        DeepSeek V3
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.modelBtn,
+                                        { borderColor: settings.deepseekModel === 'deepseek-reasoner' ? theme.colors.accent : theme.colors.divider }
+                                    ]}
+                                    onPress={() => setSettings({ ...settings, deepseekModel: 'deepseek-reasoner' })}
+                                >
+                                    <Text style={[{ color: settings.deepseekModel === 'deepseek-reasoner' ? theme.colors.accent : theme.colors.text }, theme.isHandDrawn && theme.typography.body]}>
+                                        DeepSeek R1
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
                         </View>
                     )}
 
-                    {aiState.lastLog ? (
-                        <View style={[styles.statusTextContainer, { borderTopColor: theme.colors.divider + '50', borderTopWidth: 1, marginTop: 10, paddingTop: 10 }]}>
-                            <Text style={{ color: theme.colors.secondaryText, fontSize: 12, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>
-                                {aiState.lastLog}
-                            </Text>
+                    {/* Gemini Config */}
+                    {settings.provider === 'gemini' && (
+                        <View style={[styles.section, { backgroundColor: theme.colors.cardBackground }]}>
+                            <Text style={[styles.sectionTitle, { color: theme.colors.secondaryText }, theme.isHandDrawn && theme.typography.caption]}>Gemini 配置</Text>
+                            <TextInput
+                                style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.divider }, theme.isHandDrawn && theme.typography.body]}
+                                placeholder="输入 Gemini API Key"
+                                placeholderTextColor={theme.colors.secondaryText}
+                                value={settings.geminiApiKey}
+                                onChangeText={(val) => setSettings({ ...settings, geminiApiKey: val })}
+                                secureTextEntry
+                            />
                         </View>
-                    ) : null}
-                </View>
-
-                {/* Provider Selection */}
-                <View style={[styles.section, { backgroundColor: theme.colors.cardBackground }]}>
-                    <Text style={[styles.sectionTitle, { color: theme.colors.secondaryText }, theme.isHandDrawn && theme.typography.caption]}>AI 模型</Text>
-
-                    {/* Llama Local */}
-                    <TouchableOpacity
-                        style={styles.optionRow}
-                        onPress={() => setSettings({ ...settings, provider: 'llama' })}
-                    >
-                        <View style={{ flex: 1 }}>
-                            <Text style={[styles.optionText, { color: theme.colors.text }, theme.isHandDrawn && theme.typography.body]}>Llama 本地模型 (推荐)</Text>
-                            <Text style={{ fontSize: 12, color: theme.colors.secondaryText, marginTop: 2 }}>
-                                离线使用，效果更佳，无需 API Key
-                            </Text>
-                        </View>
-                        <View style={[styles.radio, settings.provider === 'llama' && { backgroundColor: theme.colors.accent }]} />
-                    </TouchableOpacity>
-
-                    {/* DeepSeek */}
-                    <TouchableOpacity
-                        style={styles.optionRow}
-                        onPress={() => setSettings({ ...settings, provider: 'deepseek' })}
-                    >
-                        <View style={{ flex: 1 }}>
-                            <Text style={[styles.optionText, { color: theme.colors.text }, theme.isHandDrawn && theme.typography.body]}>DeepSeek (联网)</Text>
-                            <Text style={[{ fontSize: 12, color: theme.colors.secondaryText, marginTop: 2 }, theme.isHandDrawn && theme.typography.caption]}>
-                                高质量中文模型，需要 API Key
-                            </Text>
-                        </View>
-                        <View style={[styles.radio, settings.provider === 'deepseek' && { backgroundColor: theme.colors.accent }]} />
-                    </TouchableOpacity>
-
-                    {/* Gemini */}
-                    <TouchableOpacity
-                        style={styles.optionRow}
-                        onPress={() => setSettings({ ...settings, provider: 'gemini' })}
-                    >
-                        <View style={{ flex: 1 }}>
-                            <Text style={[styles.optionText, { color: theme.colors.text }, theme.isHandDrawn && theme.typography.body]}>Google Gemini (联网)</Text>
-                            <Text style={[{ fontSize: 12, color: theme.colors.secondaryText, marginTop: 2 }, theme.isHandDrawn && theme.typography.caption]}>
-                                需要 API Key，支持翻墙
-                            </Text>
-                        </View>
-                        <View style={[styles.radio, settings.provider === 'gemini' && { backgroundColor: theme.colors.accent }]} />
-                    </TouchableOpacity>
-                </View>
-
-                {/* DeepSeek Config */}
-                {settings.provider === 'deepseek' && (
-                    <View style={[styles.section, { backgroundColor: theme.colors.cardBackground }]}>
-                        <Text style={[styles.sectionTitle, { color: theme.colors.secondaryText }, theme.isHandDrawn && theme.typography.caption]}>DeepSeek 配置</Text>
-                        <TextInput
-                            style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.divider }, theme.isHandDrawn && theme.typography.body]}
-                            placeholder="输入 DeepSeek API Key"
-                            placeholderTextColor={theme.colors.secondaryText}
-                            value={settings.deepseekApiKey}
-                            onChangeText={(val) => setSettings({ ...settings, deepseekApiKey: val })}
-                            secureTextEntry
-                        />
-                        <Text style={[{ fontSize: 12, color: theme.colors.secondaryText, marginTop: 12, marginBottom: 8 }, theme.isHandDrawn && theme.typography.caption]}>
-                            选择模型
-                        </Text>
-                        <View style={{ flexDirection: 'row', gap: 12 }}>
-                            <TouchableOpacity
-                                style={[
-                                    styles.modelBtn,
-                                    { borderColor: settings.deepseekModel === 'deepseek-chat' ? theme.colors.accent : theme.colors.divider }
-                                ]}
-                                onPress={() => setSettings({ ...settings, deepseekModel: 'deepseek-chat' })}
-                            >
-                                <Text style={{ color: settings.deepseekModel === 'deepseek-chat' ? theme.colors.accent : theme.colors.text }}>
-                                    DeepSeek V3
-                                </Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[
-                                    styles.modelBtn,
-                                    { borderColor: settings.deepseekModel === 'deepseek-reasoner' ? theme.colors.accent : theme.colors.divider }
-                                ]}
-                                onPress={() => setSettings({ ...settings, deepseekModel: 'deepseek-reasoner' })}
-                            >
-                                <Text style={[{ color: settings.deepseekModel === 'deepseek-reasoner' ? theme.colors.accent : theme.colors.text }, theme.isHandDrawn && theme.typography.body]}>
-                                    DeepSeek R1
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                )}
-
-                {/* Gemini Config */}
-                {settings.provider === 'gemini' && (
-                    <View style={[styles.section, { backgroundColor: theme.colors.cardBackground }]}>
-                        <Text style={[styles.sectionTitle, { color: theme.colors.secondaryText }, theme.isHandDrawn && theme.typography.caption]}>Gemini 配置</Text>
-                        <TextInput
-                            style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.divider }, theme.isHandDrawn && theme.typography.body]}
-                            placeholder="输入 Gemini API Key"
-                            placeholderTextColor={theme.colors.secondaryText}
-                            value={settings.geminiApiKey}
-                            onChangeText={(val) => setSettings({ ...settings, geminiApiKey: val })}
-                            secureTextEntry
-                        />
-                    </View>
-                )}
-
-            </ScrollView>
+                    )}
+                </ScrollView>
+            </KeyboardAvoidingView>
         </SafeAreaView>
     );
 }
@@ -269,7 +297,10 @@ const styles = StyleSheet.create({
     },
     content: {
         flex: 1,
+    },
+    scrollContent: {
         padding: 16,
+        paddingBottom: 40,
     },
     statusCard: {
         padding: 16,

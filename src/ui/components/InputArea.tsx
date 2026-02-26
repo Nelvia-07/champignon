@@ -320,7 +320,7 @@ export const InputArea = ({ parentNote, onClearParent, onSuccess }: Props) => {
     );
 
     return (
-        <View style={[styles.container, isCollapsed && !parentNote && !isFullScreen && styles.collapsedContainer]}>
+        <View pointerEvents="box-none" style={[styles.container, isCollapsed && !parentNote && !isFullScreen && styles.collapsedContainer]}>
             {isCollapsed && !parentNote && !isFullScreen ? (
                 <TouchableOpacity
                     style={[styles.fab, { backgroundColor: theme.colors.accent }]}

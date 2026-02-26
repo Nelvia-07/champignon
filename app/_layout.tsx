@@ -17,6 +17,9 @@ export default function RootLayout() {
     useEffect(() => {
         if (fontsLoaded) {
             SplashScreen.hideAsync();
+            // Initialize AI engine if model exists
+            const { aiService } = require('../src/core/ai/service');
+            aiService.init();
         }
     }, [fontsLoaded]);
 
